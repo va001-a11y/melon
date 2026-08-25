@@ -1,17 +1,18 @@
-export type ProviderId = string;
-
-export interface ProviderDef {
-  id: string;
-  label: string;
-  protocol: string;
-  baseUrl?: string;
-  needsKey: boolean;
-  editableBaseUrl: boolean;
-  keyUrl?: string;
-  exampleModels: string[];
-  group: string;
-  note?: string;
-}
+/*
+ * Shared types come from @melon/core, which is the single definition both the
+ * server and this app compile against. They used to be declared here as well
+ * and had already drifted: this file's ProviderDef typed `protocol` and
+ * `group` as plain strings and was missing `contextWindow` and `vision`
+ * entirely, so the client could not see fields the server had been sending
+ * for some time.
+ *
+ * Everything below the re-exports is genuinely client-only — chat history,
+ * saved selections, view state — and has no business in the core.
+ */
+// Imported for use below, and re-exported so the rest of the app can keep
+// importing them from "./types" without knowing where they really live.
+import type { ProviderId, Usage, ProviderDef, Attachment as CoreAttachment } from "@melon/core";
+export type { ProviderId, Usage, ProviderDef };
 
 export interface Agent {
   id: string;
@@ -53,13 +54,12 @@ export interface Settings {
   teamBriefs?: Record<string, string>;
 }
 
-/** A file attached to a message. */
-export interface Attachment {
-  name: string;
-  mime: string;
-  kind: "image" | "text";
-  /** Base64 for images, plain text for text-like files. */
-  data: string;
+/**
+ * What the core sends to a provider, plus the byte size the composer shows on
+ * the attachment chip. The size is display-only, which is why it lives here
+ * rather than being pushed down into the core's own type.
+ */
+export interface Attachment extends CoreAttachment {
   /** Original size in bytes, for display. */
   size: number;
 }
@@ -153,10 +153,8 @@ export interface GuardState {
   dynamicLimit?: number;
 }
 
-export interface Usage {
-  inputTokens: number;
-  outputTokens: number;
-}
+// Usage is identical on both sides — re-exported so it can only ever have one
+// definition. See the shared-type block at the top of this file.
 
 export type ResponseStatus = "pending" | "streaming" | "done" | "error" | "stopped" | "throttled";
 

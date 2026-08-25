@@ -9,6 +9,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@melon/core": "*",
     "express": "^4.21.2",
     "pdf-parse": "^2.4.5"
   },

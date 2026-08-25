@@ -1,5 +1,10 @@
-import type { Response } from "express";
-import { randomUUID } from "node:crypto";
+/*
+ * This module used to take an Express `Response` and write SSE frames into it
+ * directly, which tied the orchestration logic to one HTTP server. It now
+ * emits through `RunSink` instead, and the caller decides what that means:
+ * the server wraps an SSE response around it, and a browser build can pass a
+ * sink that dispatches straight into the UI with no HTTP involved at all.
+ */
 import type { AgentSpec, Attachment, HistoryTurn, RunRequest, Usage } from "./types.js";
 import { resolveTarget } from "./providers/index.js";
 import { buildMessages, buildSystemPrompt, COT_END, hasConcluded, stripConclusion } from "./prompts.js";
@@ -10,6 +15,19 @@ import { contextWindowFor } from "./catalog.js";
 import { computeDynamicLimit, estimateTokens, tokenGuard } from "./guard.js";
 import { analytics } from "./analytics.js";
 
+
+/**
+ * Run ids were `randomUUID()` from `node:crypto`, the one import in this file
+ * a browser could not resolve. `crypto.randomUUID` is standard in both Node 19+
+ * and browsers, but only in secure contexts — so a plain-HTTP page on a LAN
+ * address would find it missing. The fallback keeps ids unique enough for what
+ * they do here: tell concurrent runs apart within one session.
+ */
+function newRunId(): string {
+  const c = globalThis.crypto;
+  if (c && typeof c.randomUUID === "function") return c.randomUUID();
+  return `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 /** Sleep that wakes immediately if the user presses Stop. */
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -25,17 +43,25 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-interface SseWriter {
+/**
+ * Where a run's events go. Deliberately the smallest surface that both
+ * transports can satisfy: an HTTP SSE stream on the server, and a plain
+ * callback in the browser.
+ *
+ * `data` is always JSON-serialisable, so a sink is free to stringify it or
+ * hand the object over untouched.
+ */
+export interface RunSink {
+  /** Emit one named event. Must be safe to call after `end()`. */
   send(event: string, data: unknown): void;
-}
-
-function makeSseWriter(res: Response): SseWriter {
-  return {
-    send(event, data) {
-      if (res.writableEnded) return;
-      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-    },
-  };
+  /** No further events will follow. Must be idempotent. */
+  end(): void;
+  /**
+   * Register interest in the consumer going away — a closed HTTP connection,
+   * or a component unmounting. The orchestrator uses this to abort in-flight
+   * provider requests rather than burning tokens nobody will read.
+   */
+  onClose(handler: () => void): void;
 }
 
 /**
@@ -110,18 +136,17 @@ function contextTokens(history: HistoryTurn[], userMessage: string, attachments:
  * genuinely debate. The user ends it with STOP; context and budget limits
  * end it automatically.
  */
-export async function runConversation(req: RunRequest, res: Response): Promise<void> {
-  const runId = randomUUID();
-  const sse = makeSseWriter(res);
+export async function runConversation(req: RunRequest, sink: RunSink): Promise<void> {
+  const runId = newRunId();
 
   if (req.agents.length === 0) {
-    sse.send("error", { message: "No agents are switched on. Click an agent in the sidebar first." });
-    res.end();
+    sink.send("error", { message: "No agents are switched on. Click an agent in the sidebar first." });
+    sink.end();
     return;
   }
   if (req.agents.length > HARD_AGENT_CAP) {
-    sse.send("error", { message: `Hard cap exceeded: ${req.agents.length} agents requested, maximum is ${HARD_AGENT_CAP}.` });
-    res.end();
+    sink.send("error", { message: `Hard cap exceeded: ${req.agents.length} agents requested, maximum is ${HARD_AGENT_CAP}.` });
+    sink.end();
     return;
   }
 
@@ -134,23 +159,23 @@ export async function runConversation(req: RunRequest, res: Response): Promise<v
   const usableWindow = Math.max(1000, smallest - req.settings.maxOutputTokens - 800);
   const startingContext = contextTokens(req.history, req.userMessage, req.attachments ?? []);
   if (startingContext >= usableWindow) {
-    sse.send("context-full", { used: startingContext, limit: usableWindow });
-    sse.send("error", {
+    sink.send("context-full", { used: startingContext, limit: usableWindow });
+    sink.send("error", {
       message:
         `This conversation (~${startingContext.toLocaleString()} tokens) no longer fits the context window of the ` +
         `smallest active model (~${usableWindow.toLocaleString()} usable). Press Reset to clear this chat, start a ` +
         `new one, or switch off the model with the smallest window.`,
     });
-    res.end();
+    sink.end();
     return;
   }
 
   tokenGuard.setBudget(req.settings.sessionOutputBudget ?? 0);
   if (tokenGuard.exhausted()) {
-    sse.send("error", {
+    sink.send("error", {
       message: `Session output budget (${tokenGuard.getBudget().toLocaleString()} tokens) is exhausted. Raise it in Settings or reset usage.`,
     });
-    res.end();
+    sink.end();
     return;
   }
 
@@ -166,7 +191,7 @@ export async function runConversation(req: RunRequest, res: Response): Promise<v
   const throttled = req.agents.slice(limit);
 
   const controller = stopController.register(runId);
-  res.on("close", () => controller.abort());
+  sink.onClose(() => controller.abort());
 
   const parallel = !!req.settings.parallel;
   const teamNames = runnable.map((a) => a.name);
@@ -176,7 +201,7 @@ export async function runConversation(req: RunRequest, res: Response): Promise<v
   const plannedRounds = mode === "single" ? 1 : mode === "rounds" ? Math.max(1, req.settings.rounds ?? 3) : 0;
   const untilAgreed = mode === "until-agreed";
 
-  sse.send("run-start", {
+  sink.send("run-start", {
     runId,
     agentIds: runnable.map((a) => a.id),
     dynamicLimit: limit,
@@ -186,9 +211,9 @@ export async function runConversation(req: RunRequest, res: Response): Promise<v
     mode,
   });
   if (throttled.length > 0) {
-    sse.send("throttle", { limit, throttledIds: throttled.map((a) => a.id), reasons });
+    sink.send("throttle", { limit, throttledIds: throttled.map((a) => a.id), reasons });
     for (const agent of throttled) {
-      sse.send("agent-throttled", { agentId: agent.id });
+      sink.send("agent-throttled", { agentId: agent.id });
       analytics.recordThrottled(agent.provider, agent.model);
     }
   }
@@ -231,12 +256,12 @@ export async function runConversation(req: RunRequest, res: Response): Promise<v
     const elapsedMs = Date.now() - runStartedAt;
     const waitMs = Math.min(earnedMs - elapsedMs, 60000);
     if (waitMs < 250) return;
-    sse.send("pacing", { waitMs: Math.round(waitMs), rate: currentRate(), limit: pace });
+    sink.send("pacing", { waitMs: Math.round(waitMs), rate: currentRate(), limit: pace });
     await sleep(waitMs, controller.signal);
   };
 
   const runAgent = async (agent: AgentSpec, round: number, priorThisRound: PriorTurn[]): Promise<void> => {
-    sse.send("agent-start", { agentId: agent.id, round });
+    sink.send("agent-start", { agentId: agent.id, round });
     analytics.recordStart(agent.provider, agent.model);
     const startedAt = Date.now();
     let firstTokenSeen = false;
@@ -271,13 +296,13 @@ export async function runConversation(req: RunRequest, res: Response): Promise<v
             }
             streamedChars += text.length;
             tokenGuard.addInflightChars(text.length);
-            sse.send("token", { agentId: agent.id, text, round });
+            sink.send("token", { agentId: agent.id, text, round });
             // Slow the stream to the user's chosen pace.
             await paceChunk(text.length);
             if (tokenGuard.exhausted() && !controller.signal.aborted) {
               analytics.recordBudgetAbort();
               stopReason = "budget";
-              sse.send("budget-stop", {
+              sink.send("budget-stop", {
                 budget: tokenGuard.getBudget(),
                 usedOutputTokens: tokenGuard.usedOutputTokens(),
               });
@@ -296,7 +321,7 @@ export async function runConversation(req: RunRequest, res: Response): Promise<v
       totals.outputTokens += result.usage.outputTokens;
       spentThisRun += usage.outputTokens;
       analytics.recordDone(agent.provider, agent.model, usage, Date.now() - startedAt);
-      sse.send("rate", { rate: currentRate(), spent: spentThisRun, limit: pace });
+      sink.send("rate", { rate: currentRate(), spent: spentThisRun, limit: pace });
 
       const raw = result.text.includes(COT_END) ? result.text.split(COT_END).pop()!.trim() : result.text.trim();
       // An agent can mark agreement, or withdraw it by speaking again without.
@@ -305,7 +330,7 @@ export async function runConversation(req: RunRequest, res: Response): Promise<v
 
       const answer = stripConclusion(raw).trim();
       if (answer) priorThisRound.push({ agentName: agent.name, content: answer });
-      sse.send("agent-done", {
+      sink.send("agent-done", {
         agentId: agent.id,
         usage: result.usage,
         round,
@@ -319,11 +344,11 @@ export async function runConversation(req: RunRequest, res: Response): Promise<v
       tokenGuard.addUsage({ inputTokens: 0, outputTokens: estimateTokens(streamedChars) });
       if (controller.signal.aborted) {
         analytics.recordStopped(agent.provider, agent.model);
-        sse.send("agent-stopped", { agentId: agent.id, round });
+        sink.send("agent-stopped", { agentId: agent.id, round });
       } else {
         analytics.recordError(agent.provider, agent.model);
         const message = err instanceof Error ? err.message : String(err);
-        sse.send("agent-error", { agentId: agent.id, message, round });
+        sink.send("agent-error", { agentId: agent.id, message, round });
       }
     }
   };
@@ -343,11 +368,11 @@ export async function runConversation(req: RunRequest, res: Response): Promise<v
     const used = contextTokens(runningHistory, req.userMessage);
     if (round > 0 && used >= usableWindow) {
       stopReason = "context";
-      sse.send("context-full", { used, limit: usableWindow });
+      sink.send("context-full", { used, limit: usableWindow });
       break;
     }
 
-    sse.send("round-start", { round, agentIds: runnable.map((a) => a.id) });
+    sink.send("round-start", { round, agentIds: runnable.map((a) => a.id) });
     const priorThisRound: PriorTurn[] = [];
 
     for (const team of teamsInOrder) {
@@ -356,7 +381,7 @@ export async function runConversation(req: RunRequest, res: Response): Promise<v
       if (members.length === 0) continue;
 
       if (isPipeline) {
-        sse.send("team-start", {
+        sink.send("team-start", {
           team,
           round,
           name: req.settings.teamNames?.[String(team)] ?? `Team ${team}`,
@@ -372,12 +397,12 @@ export async function runConversation(req: RunRequest, res: Response): Promise<v
       } else {
         for (const agent of members) {
           if (controller.signal.aborted) {
-            sse.send("agent-stopped", { agentId: agent.id, round });
+            sink.send("agent-stopped", { agentId: agent.id, round });
             continue;
           }
           await holdForPace();
           if (controller.signal.aborted) {
-            sse.send("agent-stopped", { agentId: agent.id, round });
+            sink.send("agent-stopped", { agentId: agent.id, round });
             continue;
           }
           await runAgent(agent, round, priorThisRound);
@@ -396,18 +421,18 @@ export async function runConversation(req: RunRequest, res: Response): Promise<v
       if (!controller.signal.aborted) stopReason = stopReason ?? "no-output";
       break;
     }
-    sse.send("round-done", { round });
+    sink.send("round-done", { round });
 
     // The group decides when it is finished: everyone has marked agreement.
     if (untilAgreed && runnable.every((a) => agreed.has(a.id))) {
       stopReason = "concluded";
-      sse.send("concluded", { round, agents: runnable.map((a) => a.name) });
+      sink.send("concluded", { round, agents: runnable.map((a) => a.name) });
       break;
     }
   }
 
   stopController.release(runId);
-  sse.send("guard", {
+  sink.send("guard", {
     session: tokenGuard.sessionUsage(),
     budget: tokenGuard.getBudget(),
     remainingFraction: tokenGuard.remainingFraction(),
@@ -418,9 +443,9 @@ export async function runConversation(req: RunRequest, res: Response): Promise<v
     spentThisRun,
   });
   if (controller.signal.aborted) {
-    sse.send("run-stopped", { runId, reason: stopReason ?? "stopped" });
+    sink.send("run-stopped", { runId, reason: stopReason ?? "stopped" });
   } else {
-    sse.send("run-done", { runId, totals, reason: stopReason });
+    sink.send("run-done", { runId, totals, reason: stopReason });
   }
-  res.end();
+  sink.end();
 }

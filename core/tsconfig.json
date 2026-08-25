@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+
+    /*
+     * The point of this file is what it LEAVES OUT. "types": [] means no
+     * @types/node, so a stray `process`, `Buffer` or `node:` import fails to
+     * compile here rather than at runtime in someone's browser. DOM is listed
+     * only for the web-standard globals the adapters genuinely use — fetch,
+     * AbortController, TextDecoder — all of which Node has had since 18.
+     *
+     * Emitting nothing: consumers compile the source themselves (tsx on the
+     * server, Vite in the client), so this build is purely a guard.
+     */
+    "lib": ["ES2022", "DOM"],
+    "types": [],
+    "noEmit": true
+  },
+  "include": ["src"]
+}

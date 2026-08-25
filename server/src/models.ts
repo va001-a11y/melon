@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
-import type { AgentSpec } from "./types.js";
-import { resolveTarget } from "./providers/index.js";
+import type { AgentSpec } from "@melon/core";
+import { resolveTarget } from "@melon/core";
 
 /**
  * Ask the provider which models it actually serves right now.

@@ -1,17 +1,11 @@
 import express from "express";
+import { sseSink } from "./sse.js";
+import type { AgentSpec, RunRequest } from "@melon/core";
+import { BUNDLES, COMPAT_PROVIDERS, HARD_AGENT_CAP, MODEL_REGISTRY, PROVIDERS, RECOMMENDED_AGENTS, analytics, resolveTarget, runConversation, stopController, tokenGuard } from "@melon/core";
 import { execFile } from "node:child_process";
-import type { AgentSpec, RunRequest } from "./types.js";
-import { PROVIDERS } from "./catalog.js";
-import { resolveTarget } from "./providers/index.js";
-import { runConversation } from "./orchestrator.js";
-import { stopController } from "./stop.js";
-import { COMPAT_PROVIDERS, HARD_AGENT_CAP, MODEL_REGISTRY, RECOMMENDED_AGENTS } from "./registry.js";
 import { extractPdf } from "./files.js";
 import { listModels } from "./models.js";
-import { analytics } from "./analytics.js";
-import { BUNDLES } from "./marketplace.js";
 import { demoChatCompletions } from "./demo.js";
-import { tokenGuard } from "./guard.js";
 
 // Deliberately not process.env.PORT: dev launchers set PORT for the
 // front-end and would collide the API server onto Vite's port.
@@ -210,7 +204,7 @@ app.post("/api/run", (req, res) => {
   res.setHeader("cache-control", "no-cache");
   res.setHeader("connection", "keep-alive");
   res.flushHeaders();
-  void runConversation(req.body as RunRequest, res);
+  void runConversation(req.body as RunRequest, sseSink(res));
 });
 
 // STOP TOKEN FLOW — global circuit breaker. Terminal by design: aborted
