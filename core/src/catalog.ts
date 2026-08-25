@@ -6,7 +6,7 @@
  * generateContent, Ollama's local API, and the OpenAI /chat/completions shape
  * that nearly everyone else implements. Adding a service is a data change.
  */
-export type Protocol = "openai" | "anthropic" | "google" | "ollama";
+export type Protocol = "openai" | "anthropic" | "google" | "ollama" | "demo";
 
 export interface ProviderDef {
   id: string;
@@ -305,13 +305,14 @@ export const PROVIDERS: ProviderDef[] = [
   {
     id: "demo",
     label: "Melon demo (no key)",
-    protocol: "openai",
-    baseUrl: "http://localhost:5175/api/demo/v1",
+    // Generated in-process by providers/demo.ts. No endpoint and no network,
+    // so it behaves identically in the desktop build and a static browser one.
+    protocol: "demo",
     needsKey: false,
     editableBaseUrl: false,
     group: "Local",
-    exampleModels: ["demo"],
-    note: "Built-in fake model for trying the app without any API keys.",
+    exampleModels: ["melon-demo"],
+    note: "Built-in fake model. No key, no network — try Melon before adding a provider.",
   },
 
   // ---- Escape hatch ----

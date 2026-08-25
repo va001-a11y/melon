@@ -5,7 +5,6 @@ import { BUNDLES, COMPAT_PROVIDERS, HARD_AGENT_CAP, MODEL_REGISTRY, PROVIDERS, R
 import { execFile } from "node:child_process";
 import { extractPdf } from "./files.js";
 import { listModels } from "./models.js";
-import { demoChatCompletions } from "./demo.js";
 
 // Deliberately not process.env.PORT: dev launchers set PORT for the
 // front-end and would collide the API server onto Vite's port.
@@ -184,20 +183,13 @@ app.get("/api/marketplace", (_req, res) => {
   res.json({ bundles: BUNDLES });
 });
 
-// Keyless demo provider (OpenAI-compatible) for smoke-testing the platform.
-app.post("/api/demo/v1/chat/completions", demoChatCompletions);
-
-// The demo provider answers /models too, so Fetch behaves like a real one.
-app.get("/api/demo/v1/models", (_req, res) => {
-  res.json({
-    data: [
-      { id: "demo-researcher" },
-      { id: "demo-writer" },
-      { id: "demo-critic" },
-      { id: "demo-simplifier" },
-    ],
-  });
-});
+/*
+ * The keyless demo provider used to be served from here as an
+ * OpenAI-compatible endpoint. It is now a real adapter in @melon/core
+ * (providers/demo.ts) that generates its stream in-process, so it works
+ * without a server at all — and both builds run the same code rather than
+ * one going over HTTP and the other not.
+ */
 
 app.post("/api/run", (req, res) => {
   res.setHeader("content-type", "text/event-stream");

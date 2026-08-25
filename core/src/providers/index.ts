@@ -5,12 +5,14 @@ import { anthropic } from "./anthropic.js";
 import { openai } from "./openai.js";
 import { google } from "./google.js";
 import { ollama } from "./ollama.js";
+import { demo } from "./demo.js";
 
 const byProtocol: Record<Protocol, ProviderAdapter> = {
   anthropic,
   openai,
   google,
   ollama,
+  demo,
 };
 
 export interface ResolvedTarget {
