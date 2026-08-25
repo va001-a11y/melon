@@ -26,6 +26,38 @@ import { ChatView } from "./ChatView";
 import { TopBar } from "./TopBar";
 import type { RegistryInfo } from "./types";
 
+/**
+ * Melon's storage keys were once prefixed `vedai.`, from the project's original
+ * name. Renaming them without this would look exactly like data loss: the app
+ * would read `melon.agents`, find nothing, and present an empty install to
+ * someone whose chats, agents and keys are all still sitting in the browser
+ * under the old names.
+ *
+ * Runs at module load, before any state initialiser below reads storage. It is
+ * idempotent — once the old keys are gone there is nothing left to match — so
+ * it needs no "already migrated" flag of its own.
+ */
+function migrateLegacyKeys(): void {
+  try {
+    // Snapshot the names first; the loop mutates the store as it goes.
+    for (const key of Object.keys(localStorage)) {
+      if (!key.startsWith("vedai.")) continue;
+      const renamed = `melon.${key.slice("vedai.".length)}`;
+      const value = localStorage.getItem(key);
+      // Never clobber a newer value that already exists under the new name.
+      if (value !== null && localStorage.getItem(renamed) === null) {
+        localStorage.setItem(renamed, value);
+      }
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // Storage can be unavailable (private browsing, blocked cookies). The app
+    // already tolerates that everywhere else, so failing here is survivable.
+  }
+}
+
+migrateLegacyKeys();
+
 function loadJson<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key);
@@ -56,10 +88,10 @@ function chatTitle(messages: Message[]): string {
 }
 
 export default function App() {
-  const [agents, setAgents] = useState<Agent[]>(() => loadJson("vedai.agents", []));
+  const [agents, setAgents] = useState<Agent[]>(() => loadJson("melon.agents", []));
   const [settings, setSettings] = useState<Settings>(() => ({
     ...DEFAULT_SETTINGS,
-    ...loadJson<Partial<Settings>>("vedai.settings", {}),
+    ...loadJson<Partial<Settings>>("melon.settings", {}),
   }));
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [showMarketplace, setShowMarketplace] = useState(false);
@@ -67,7 +99,7 @@ export default function App() {
   /** On narrow screens the sidebar is a drawer rather than a fixed column. */
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [theme, setTheme] = useState<ThemeChoice>(() =>
-    migrateThemeChoice(loadJson<unknown>("vedai.theme", DEFAULT_THEME_CHOICE))
+    migrateThemeChoice(loadJson<unknown>("melon.theme", DEFAULT_THEME_CHOICE))
   );
   const [contextLimit, setContextLimit] = useState(0);
   const [burnRate, setBurnRate] = useState(0);
@@ -76,15 +108,15 @@ export default function App() {
   /** Tone/personality used by the previous run, to detect a mid-chat change. */
   const lastStyleRef = useRef<{ mode: string; personality: string } | null>(null);
   const [groupPersonalities, setGroupPersonalities] = useState<Record<string, string>>(() =>
-    loadJson("vedai.groupPersonalities", {})
+    loadJson("melon.groupPersonalities", {})
   );
-  const [presets, setPresets] = useState<Preset[]>(() => loadJson("vedai.presets", []));
-  const [teamNames, setTeamNames] = useState<Record<string, string>>(() => loadJson("vedai.teamNames", {}));
-  const [teamBriefs, setTeamBriefs] = useState<Record<string, string>>(() => loadJson("vedai.teamBriefs", {}));
-  const [chatsIndex, setChatsIndex] = useState<ChatMeta[]>(() => loadJson("vedai.chats.index", []));
-  const [chatId, setChatId] = useState<string>(() => loadJson("vedai.currentChat", makeId()));
+  const [presets, setPresets] = useState<Preset[]>(() => loadJson("melon.presets", []));
+  const [teamNames, setTeamNames] = useState<Record<string, string>>(() => loadJson("melon.teamNames", {}));
+  const [teamBriefs, setTeamBriefs] = useState<Record<string, string>>(() => loadJson("melon.teamBriefs", {}));
+  const [chatsIndex, setChatsIndex] = useState<ChatMeta[]>(() => loadJson("melon.chats.index", []));
+  const [chatId, setChatId] = useState<string>(() => loadJson("melon.currentChat", makeId()));
   const [messages, setMessages] = useState<Message[]>(() =>
-    sanitizeMessages(loadJson<Message[]>(`vedai.chat.${loadJson("vedai.currentChat", "")}`, []))
+    sanitizeMessages(loadJson<Message[]>(`melon.chat.${loadJson("melon.currentChat", "")}`, []))
   );
   const [running, setRunning] = useState(false);
   const [burst, setBurst] = useState(false);
@@ -93,28 +125,28 @@ export default function App() {
   const [banner, setBanner] = useState<string | null>(null);
   const runningRef = useRef(false);
 
-  useEffect(() => localStorage.setItem("vedai.agents", JSON.stringify(agents)), [agents]);
-  useEffect(() => localStorage.setItem("vedai.settings", JSON.stringify(settings)), [settings]);
+  useEffect(() => localStorage.setItem("melon.agents", JSON.stringify(agents)), [agents]);
+  useEffect(() => localStorage.setItem("melon.settings", JSON.stringify(settings)), [settings]);
   useEffect(
-    () => localStorage.setItem("vedai.groupPersonalities", JSON.stringify(groupPersonalities)),
+    () => localStorage.setItem("melon.groupPersonalities", JSON.stringify(groupPersonalities)),
     [groupPersonalities]
   );
-  useEffect(() => localStorage.setItem("vedai.presets", JSON.stringify(presets)), [presets]);
-  useEffect(() => localStorage.setItem("vedai.teamNames", JSON.stringify(teamNames)), [teamNames]);
-  useEffect(() => localStorage.setItem("vedai.teamBriefs", JSON.stringify(teamBriefs)), [teamBriefs]);
+  useEffect(() => localStorage.setItem("melon.presets", JSON.stringify(presets)), [presets]);
+  useEffect(() => localStorage.setItem("melon.teamNames", JSON.stringify(teamNames)), [teamNames]);
+  useEffect(() => localStorage.setItem("melon.teamBriefs", JSON.stringify(teamBriefs)), [teamBriefs]);
   useEffect(() => {
-    localStorage.setItem("vedai.theme", JSON.stringify(theme));
+    localStorage.setItem("melon.theme", JSON.stringify(theme));
     applyTheme(theme);
     // Re-apply when the device flips, so the pairing switches live.
     return watchSystemScheme(() => applyTheme(theme));
   }, [theme]);
-  useEffect(() => localStorage.setItem("vedai.chats.index", JSON.stringify(chatsIndex)), [chatsIndex]);
-  useEffect(() => localStorage.setItem("vedai.currentChat", JSON.stringify(chatId)), [chatId]);
+  useEffect(() => localStorage.setItem("melon.chats.index", JSON.stringify(chatsIndex)), [chatsIndex]);
+  useEffect(() => localStorage.setItem("melon.currentChat", JSON.stringify(chatId)), [chatId]);
 
   // Persist the current chat whenever it settles (never mid-stream).
   useEffect(() => {
     if (running || messages.length === 0) return;
-    localStorage.setItem(`vedai.chat.${chatId}`, JSON.stringify(messages));
+    localStorage.setItem(`melon.chat.${chatId}`, JSON.stringify(messages));
     setChatsIndex((prev) => {
       const existing = prev.find((c) => c.id === chatId);
       const meta: ChatMeta = {
@@ -443,7 +475,7 @@ export default function App() {
     if (!window.confirm("Erase every message in this chat? This cannot be undone.")) return;
     setMessages([]);
     setBanner(null);
-    localStorage.removeItem(`vedai.chat.${chatId}`);
+    localStorage.removeItem(`melon.chat.${chatId}`);
     // Keep the chat in the list (now empty) rather than orphaning its title.
     setChatsIndex((prev) => prev.map((c) => (c.id === chatId ? { ...c, updatedAt: Date.now() } : c)));
     try {
@@ -496,7 +528,7 @@ export default function App() {
   const loadChat = useCallback((id: string) => {
     if (runningRef.current) return;
     setChatId(id);
-    setMessages(sanitizeMessages(loadJson<Message[]>(`vedai.chat.${id}`, [])));
+    setMessages(sanitizeMessages(loadJson<Message[]>(`melon.chat.${id}`, [])));
     setBanner(null);
     // Opening a chat counts as activity, so it rises to the top of the list.
     setChatsIndex((prev) => {
@@ -512,7 +544,7 @@ export default function App() {
 
   const deleteChat = useCallback(
     (id: string) => {
-      localStorage.removeItem(`vedai.chat.${id}`);
+      localStorage.removeItem(`melon.chat.${id}`);
       setChatsIndex((prev) => prev.filter((c) => c.id !== id));
       if (id === chatId) {
         setChatId(makeId());

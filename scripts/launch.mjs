@@ -264,7 +264,7 @@ async function main() {
 
   const dev = spawnNpm(["run", "dev"], {
     MELON_CLIENT_PORT: String(clientPort),
-    VEDAI_SERVER_PORT: String(serverPort),
+    MELON_SERVER_PORT: String(serverPort),
   });
 
   // Give Vite a moment to bind before the browser asks for the page.

@@ -5,7 +5,7 @@ import react from "@vitejs/plugin-react";
 // with another project (5173 is also Vite's default). Falls back to the
 // usual pair when run directly with `npm run dev`.
 const clientPort = Number(process.env.MELON_CLIENT_PORT) || 5173;
-const serverPort = Number(process.env.VEDAI_SERVER_PORT) || 5175;
+const serverPort = Number(process.env.MELON_SERVER_PORT) || 5175;
 
 export default defineConfig({
   plugins: [react()],

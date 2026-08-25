@@ -15,7 +15,7 @@ import { tokenGuard } from "./guard.js";
 
 // Deliberately not process.env.PORT: dev launchers set PORT for the
 // front-end and would collide the API server onto Vite's port.
-const PORT = Number(process.env.VEDAI_SERVER_PORT ?? 5175);
+const PORT = Number(process.env.MELON_SERVER_PORT ?? 5175);
 const app = express();
 // Attachments are base64 in the body, so this has to be generous: a 4 MB
 // file is ~5.5 MB encoded, and several can be sent at once.
@@ -244,7 +244,7 @@ function start(attempt = 1): void {
         `\n  Port ${PORT} is already in use.\n` +
           `  Melon may already be running — check http://localhost:5173\n` +
           `  Otherwise close the other program, or use a different port:\n` +
-          `      set VEDAI_SERVER_PORT=5180 && npm run dev\n`
+          `      set MELON_SERVER_PORT=5180 && npm run dev\n`
       );
     } else {
       console.error("Melon server failed to start:", err.message);

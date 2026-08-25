@@ -90,7 +90,7 @@ export function Sidebar(props: Props) {
     return chats.filter((c) => {
       if (c.title.toLowerCase().includes(q)) return true;
       try {
-        return (localStorage.getItem(`vedai.chat.${c.id}`) ?? "").toLowerCase().includes(q);
+        return (localStorage.getItem(`melon.chat.${c.id}`) ?? "").toLowerCase().includes(q);
       } catch {
         return false;
       }
