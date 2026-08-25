@@ -67,19 +67,142 @@ function loadJson<T>(key: string, fallback: T): T {
   }
 }
 
-/** A chat loaded from storage can't still be streaming — settle transient statuses. */
-function sanitizeMessages(messages: Message[]): Message[] {
-  return messages.map((m) => {
-    if (m.kind !== "run") return m;
-    const responses = { ...m.responses };
+/**
+ * Stored values are not trustworthy: they may come from an older build, a
+ * half-finished write, or hand-editing. `loadJson` already survives invalid
+ * JSON, but *valid* JSON of the wrong shape is the dangerous case — a preset
+ * missing its `activeIds` array reads back fine and then throws during render,
+ * taking the whole app down. These shape the data on the way in, so one bad
+ * record is dropped instead of being fatal.
+ */
+function loadList<T>(key: string, normalise: (raw: Record<string, unknown>) => T | null): T[] {
+  const raw = loadJson<unknown>(key, []);
+  if (!Array.isArray(raw)) return [];
+  const out: T[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const shaped = normalise(item as Record<string, unknown>);
+    if (shaped) out.push(shaped);
+  }
+  return out;
+}
+
+/** A record of string→string, with anything else discarded. */
+function loadStringRecord(key: string): Record<string, string> {
+  const raw = loadJson<unknown>(key, {});
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "string") out[k] = v;
+  }
+  return out;
+}
+
+const str = (v: unknown, fallback = ""): string => (typeof v === "string" ? v : fallback);
+
+function normaliseAgent(raw: Record<string, unknown>): Agent | null {
+  // Without an id an agent cannot be toggled, edited or removed — drop it.
+  if (typeof raw.id !== "string") return null;
+  return {
+    id: raw.id,
+    name: str(raw.name, "Unnamed agent"),
+    provider: str(raw.provider, "anthropic") as Agent["provider"],
+    model: str(raw.model),
+    apiKey: str(raw.apiKey),
+    baseUrl: str(raw.baseUrl),
+    role: str(raw.role, "generalist"),
+    personality: str(raw.personality),
+    active: raw.active === true,
+    color: str(raw.color, AGENT_COLORS[0]),
+    team: typeof raw.team === "number" && raw.team > 0 ? raw.team : 1,
+  };
+}
+
+function normalisePreset(raw: Record<string, unknown>): Preset | null {
+  if (typeof raw.id !== "string") return null;
+  return {
+    id: raw.id,
+    name: str(raw.name, "Untitled preset"),
+    // The field whose absence crashed the sidebar.
+    activeIds: Array.isArray(raw.activeIds) ? raw.activeIds.filter((v): v is string => typeof v === "string") : [],
+    teams: raw.teams && typeof raw.teams === "object" ? (raw.teams as Record<string, number>) : undefined,
+    teamNames: raw.teamNames && typeof raw.teamNames === "object" ? (raw.teamNames as Record<string, string>) : undefined,
+    teamBriefs:
+      raw.teamBriefs && typeof raw.teamBriefs === "object" ? (raw.teamBriefs as Record<string, string>) : undefined,
+  };
+}
+
+function normaliseChatMeta(raw: Record<string, unknown>): ChatMeta | null {
+  if (typeof raw.id !== "string") return null;
+  return {
+    id: raw.id,
+    title: str(raw.title, "Untitled chat"),
+    updatedAt: typeof raw.updatedAt === "number" ? raw.updatedAt : 0,
+    customTitle: raw.customTitle === true ? true : undefined,
+  };
+}
+
+/**
+ * Shape a stored chat into messages the view can render.
+ *
+ * Two jobs. First, a chat loaded from storage can't still be streaming, so
+ * transient statuses are settled. Second, and less obviously, every field the
+ * view dereferences has to actually be there: `ChatView` maps over
+ * `agentOrder` directly, so a run block saved without one — by an older build,
+ * or by a write cut short — throws mid-render and takes the page down. Rather
+ * than drop such a block, its order is rebuilt from the responses it does have,
+ * which keeps the conversation readable.
+ */
+function sanitizeMessages(raw: unknown): Message[] {
+  if (!Array.isArray(raw)) return [];
+  const out: Message[] = [];
+
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const m = item as Record<string, unknown>;
+
+    if (m.kind === "user") {
+      if (typeof m.text !== "string") continue;
+      out.push({
+        id: str(m.id, makeId()),
+        kind: "user",
+        text: m.text,
+        attachments: Array.isArray(m.attachments) ? (m.attachments as Attachment[]) : undefined,
+      });
+      continue;
+    }
+
+    if (m.kind !== "run") continue;
+
+    const responses: Record<string, AgentResponse> =
+      m.responses && typeof m.responses === "object" && !Array.isArray(m.responses)
+        ? { ...(m.responses as Record<string, AgentResponse>) }
+        : {};
+
     for (const id of Object.keys(responses)) {
       const r = responses[id];
+      if (!r || typeof r !== "object") {
+        delete responses[id];
+        continue;
+      }
       if (r.status === "streaming" || r.status === "pending") {
         responses[id] = { ...r, status: "stopped" };
       }
     }
-    return { ...m, responses };
-  });
+
+    out.push({
+      id: str(m.id, makeId()),
+      kind: "run",
+      // Fall back to the responses' own keys rather than losing the block.
+      agentOrder: Array.isArray(m.agentOrder)
+        ? m.agentOrder.filter((v): v is string => typeof v === "string")
+        : Object.keys(responses),
+      responses,
+      round: typeof m.round === "number" ? m.round : undefined,
+    });
+  }
+
+  return out;
 }
 
 function chatTitle(messages: Message[]): string {
@@ -88,7 +211,7 @@ function chatTitle(messages: Message[]): string {
 }
 
 export default function App() {
-  const [agents, setAgents] = useState<Agent[]>(() => loadJson("melon.agents", []));
+  const [agents, setAgents] = useState<Agent[]>(() => loadList("melon.agents", normaliseAgent));
   const [settings, setSettings] = useState<Settings>(() => ({
     ...DEFAULT_SETTINGS,
     ...loadJson<Partial<Settings>>("melon.settings", {}),
@@ -108,12 +231,12 @@ export default function App() {
   /** Tone/personality used by the previous run, to detect a mid-chat change. */
   const lastStyleRef = useRef<{ mode: string; personality: string } | null>(null);
   const [groupPersonalities, setGroupPersonalities] = useState<Record<string, string>>(() =>
-    loadJson("melon.groupPersonalities", {})
+    loadStringRecord("melon.groupPersonalities")
   );
-  const [presets, setPresets] = useState<Preset[]>(() => loadJson("melon.presets", []));
-  const [teamNames, setTeamNames] = useState<Record<string, string>>(() => loadJson("melon.teamNames", {}));
-  const [teamBriefs, setTeamBriefs] = useState<Record<string, string>>(() => loadJson("melon.teamBriefs", {}));
-  const [chatsIndex, setChatsIndex] = useState<ChatMeta[]>(() => loadJson("melon.chats.index", []));
+  const [presets, setPresets] = useState<Preset[]>(() => loadList("melon.presets", normalisePreset));
+  const [teamNames, setTeamNames] = useState<Record<string, string>>(() => loadStringRecord("melon.teamNames"));
+  const [teamBriefs, setTeamBriefs] = useState<Record<string, string>>(() => loadStringRecord("melon.teamBriefs"));
+  const [chatsIndex, setChatsIndex] = useState<ChatMeta[]>(() => loadList("melon.chats.index", normaliseChatMeta));
   const [chatId, setChatId] = useState<string>(() => loadJson("melon.currentChat", makeId()));
   const [messages, setMessages] = useState<Message[]>(() =>
     sanitizeMessages(loadJson<Message[]>(`melon.chat.${loadJson("melon.currentChat", "")}`, []))

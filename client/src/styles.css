@@ -2467,3 +2467,89 @@ body {
     padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
   }
 }
+
+/* ---------- Crash recovery screen (ErrorBoundary) ----------
+ * Deliberately plain and self-contained: it has to render correctly when the
+ * rest of the app could not, so it leans only on the palette tokens.
+ */
+.crash-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.crash-panel {
+  max-width: 560px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 26px;
+}
+
+.crash-panel h1 {
+  font-size: 20px;
+  margin-bottom: 14px;
+  color: var(--text);
+}
+
+.crash-panel p {
+  color: var(--text-dim);
+  font-size: 13.5px;
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+.crash-cause strong {
+  color: var(--text);
+}
+
+.crash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 20px 0 16px;
+}
+
+/* Destructive, so it reads as the red option rather than a neighbour of Try
+   again. Overrides the icon-only sizing .stop-btn carries in the composer. */
+.crash-clear {
+  width: auto;
+  height: auto;
+  padding: 10px 16px;
+  font-weight: 600;
+  font-size: 12.5px;
+}
+
+.crash-note {
+  font-size: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.crash-details {
+  margin-top: 12px;
+}
+
+.crash-details summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.crash-details pre {
+  margin-top: 10px;
+  padding: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
