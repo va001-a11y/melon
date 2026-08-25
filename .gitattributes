@@ -1,0 +1,24 @@
+# Line endings are load-bearing in this repo, so they are pinned here rather
+# than left to each contributor's core.autocrlf setting.
+#
+#   Melon.bat     cmd.exe misparses an LF-only batch file and closes the
+#                 window with no message, so it MUST arrive as CRLF.
+#   melon.command a POSIX shell script; CRLF makes sh fail on the shebang.
+#
+# Without this file, whether a fresh clone launches depends on the cloner's
+# git config, which is not a thing anyone should have to debug.
+
+* text=auto eol=lf
+
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+*.command text eol=lf
+*.sh      text eol=lf
+*.mjs     text eol=lf
+
+# Binary — never touch these.
+*.png binary
+*.jpg binary
+*.ico binary
+*.zip binary

@@ -1,0 +1,332 @@
+/**
+ * Provider catalog — the single source of truth for what Melon can talk to.
+ *
+ * Each entry names a real service and declares which wire protocol it speaks.
+ * Four protocols cover the whole industry: Anthropic's Messages API, Google's
+ * generateContent, Ollama's local API, and the OpenAI /chat/completions shape
+ * that nearly everyone else implements. Adding a service is a data change.
+ */
+export type Protocol = "openai" | "anthropic" | "google" | "ollama";
+
+export interface ProviderDef {
+  id: string;
+  label: string;
+  protocol: Protocol;
+  /** Fixed endpoint for hosted services; undefined means the user must supply one. */
+  baseUrl?: string;
+  needsKey: boolean;
+  /** Local runtimes and custom endpoints let the user change the URL. */
+  editableBaseUrl: boolean;
+  /** Where to get a key. */
+  keyUrl?: string;
+  exampleModels: string[];
+  /** Grouping for the picker. */
+  group: "Frontier" | "Open & fast" | "Aggregator" | "Local" | "Search" | "Custom";
+  note?: string;
+  /** Conservative context window in tokens. Omitted entries use a safe default. */
+  contextWindow?: number;
+  /** Whether this provider accepts image attachments. */
+  vision?: boolean;
+}
+
+/** Conservative fallback when a provider doesn't declare a window. */
+const DEFAULT_CONTEXT_WINDOW = 32000;
+
+export function contextWindowFor(providerId: string): number {
+  return getProvider(providerId)?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
+}
+
+export function supportsVision(providerId: string): boolean {
+  return getProvider(providerId)?.vision ?? false;
+}
+
+export const PROVIDERS: ProviderDef[] = [
+  // ---- Frontier labs (native protocols) ----
+  {
+    id: "anthropic",
+    label: "Anthropic (Claude)",
+    protocol: "anthropic",
+    baseUrl: "https://api.anthropic.com",
+    needsKey: true,
+    editableBaseUrl: false,
+    keyUrl: "https://console.anthropic.com/settings/keys",
+    group: "Frontier",
+    exampleModels: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
+    contextWindow: 200000,
+    vision: true,
+  },
+  {
+    id: "openai",
+    label: "OpenAI (GPT)",
+    protocol: "openai",
+    baseUrl: "https://api.openai.com/v1",
+    needsKey: true,
+    editableBaseUrl: false,
+    keyUrl: "https://platform.openai.com/api-keys",
+    group: "Frontier",
+    exampleModels: ["gpt-5", "gpt-5-mini", "gpt-4o"],
+    contextWindow: 272000,
+    vision: true,
+  },
+  {
+    id: "google",
+    label: "Google (Gemini)",
+    protocol: "google",
+    baseUrl: "https://generativelanguage.googleapis.com",
+    needsKey: true,
+    editableBaseUrl: false,
+    keyUrl: "https://aistudio.google.com/apikey",
+    group: "Frontier",
+    exampleModels: ["gemini-2.5-pro", "gemini-2.5-flash"],
+    contextWindow: 1000000,
+    vision: true,
+  },
+  {
+    id: "xai",
+    label: "xAI (Grok)",
+    protocol: "openai",
+    baseUrl: "https://api.x.ai/v1",
+    needsKey: true,
+    editableBaseUrl: false,
+    keyUrl: "https://console.x.ai",
+    group: "Frontier",
+    exampleModels: ["grok-4", "grok-3-mini"],
+    contextWindow: 256000,
+    vision: true,
+  },
+  {
+    id: "mistral",
+    label: "Mistral",
+    protocol: "openai",
+    baseUrl: "https://api.mistral.ai/v1",
+    needsKey: true,
+    editableBaseUrl: false,
+    keyUrl: "https://console.mistral.ai/api-keys",
+    group: "Frontier",
+    exampleModels: ["mistral-large-latest", "mistral-small-latest", "magistral-medium-latest"],
+    contextWindow: 128000,
+    vision: true,
+  },
+  {
+    id: "deepseek",
+    label: "DeepSeek",
+    protocol: "openai",
+    baseUrl: "https://api.deepseek.com/v1",
+    needsKey: true,
+    editableBaseUrl: false,
+    keyUrl: "https://platform.deepseek.com/api_keys",
+    group: "Frontier",
+    exampleModels: ["deepseek-chat", "deepseek-reasoner"],
+    contextWindow: 128000,
+  },
+  {
+    id: "cohere",
+    label: "Cohere (Command)",
+    protocol: "openai",
+    baseUrl: "https://api.cohere.ai/compatibility/v1",
+    needsKey: true,
+    editableBaseUrl: false,
+    keyUrl: "https://dashboard.cohere.com/api-keys",
+    group: "Frontier",
+    exampleModels: ["command-a-03-2025", "command-r-plus"],
+  },
+
+  // ---- Search-grounded ----
+  {
+    id: "perplexity",
+    label: "Perplexity (Sonar)",
+    protocol: "openai",
+    baseUrl: "https://api.perplexity.ai",
+    needsKey: true,
+    editableBaseUrl: false,
+    keyUrl: "https://www.perplexity.ai/settings/api",
+    group: "Search",
+    exampleModels: ["sonar-pro", "sonar", "sonar-reasoning-pro"],
+    contextWindow: 128000,
+    note: "Answers are grounded in live web search — good as a Researcher.",
+  },
+
+  // ---- Open models / fast inference ----
+  {
+    id: "nvidia",
+    label: "NVIDIA NIM (Nemotron)",
+    protocol: "openai",
+    baseUrl: "https://integrate.api.nvidia.com/v1",
+    needsKey: true,
+    editableBaseUrl: false,
+    keyUrl: "https://build.nvidia.com",
+    group: "Open & fast",
+    exampleModels: [
+      "nvidia/llama-3.3-nemotron-super-49b-v1.5",
+      "nvidia/llama-3.1-nemotron-70b-instruct",
+      "meta/llama-3.3-70b-instruct",
+    ],
+    note: "Nemotron and many open models, hosted by NVIDIA.",
+  },
+  {
+    id: "moonshot",
+    label: "Moonshot (Kimi)",
+    protocol: "openai",
+    baseUrl: "https://api.moonshot.ai/v1",
+    needsKey: true,
+    editableBaseUrl: false,
+    keyUrl: "https://platform.moonshot.ai/console/api-keys",
+    group: "Open & fast",
+    exampleModels: ["kimi-k2-0711-preview", "moonshot-v1-128k"],
+  },
+  {
+    id: "groq",
+    label: "Groq (very fast)",
+    protocol: "openai",
+    baseUrl: "https://api.groq.com/openai/v1",
+    needsKey: true,
+    editableBaseUrl: false,
+    keyUrl: "https://console.groq.com/keys",
+    group: "Open & fast",
+    exampleModels: ["llama-3.3-70b-versatile", "qwen-2.5-32b"],
+    contextWindow: 128000,
+  },
+  {
+    id: "cerebras",
+    label: "Cerebras (very fast)",
+    protocol: "openai",
+    baseUrl: "https://api.cerebras.ai/v1",
+    needsKey: true,
+    editableBaseUrl: false,
+    keyUrl: "https://cloud.cerebras.ai",
+    group: "Open & fast",
+    exampleModels: ["llama-3.3-70b", "qwen-3-32b"],
+  },
+  {
+    id: "together",
+    label: "Together AI",
+    protocol: "openai",
+    baseUrl: "https://api.together.xyz/v1",
+    needsKey: true,
+    editableBaseUrl: false,
+    keyUrl: "https://api.together.ai/settings/api-keys",
+    group: "Open & fast",
+    exampleModels: ["meta-llama/Llama-3.3-70B-Instruct-Turbo", "deepseek-ai/DeepSeek-V3"],
+  },
+  {
+    id: "fireworks",
+    label: "Fireworks AI",
+    protocol: "openai",
+    baseUrl: "https://api.fireworks.ai/inference/v1",
+    needsKey: true,
+    editableBaseUrl: false,
+    keyUrl: "https://fireworks.ai/account/api-keys",
+    group: "Open & fast",
+    exampleModels: ["accounts/fireworks/models/llama-v3p3-70b-instruct"],
+  },
+  {
+    id: "deepinfra",
+    label: "DeepInfra",
+    protocol: "openai",
+    baseUrl: "https://api.deepinfra.com/v1/openai",
+    needsKey: true,
+    editableBaseUrl: false,
+    keyUrl: "https://deepinfra.com/dash/api_keys",
+    group: "Open & fast",
+    exampleModels: ["meta-llama/Llama-3.3-70B-Instruct", "Qwen/Qwen2.5-72B-Instruct"],
+  },
+
+  // ---- Aggregators ----
+  {
+    id: "openrouter",
+    label: "OpenRouter (300+ models)",
+    protocol: "openai",
+    baseUrl: "https://openrouter.ai/api/v1",
+    needsKey: true,
+    editableBaseUrl: false,
+    keyUrl: "https://openrouter.ai/keys",
+    group: "Aggregator",
+    exampleModels: ["anthropic/claude-sonnet-5", "google/gemini-2.5-pro", "meta-llama/llama-3.3-70b-instruct"],
+    contextWindow: 128000,
+    vision: true,
+    note: "One key reaches hundreds of models from most major labs.",
+  },
+  {
+    id: "github-models",
+    label: "GitHub Models (Copilot-adjacent)",
+    protocol: "openai",
+    baseUrl: "https://models.github.ai/inference",
+    needsKey: true,
+    editableBaseUrl: false,
+    keyUrl: "https://github.com/settings/tokens",
+    group: "Aggregator",
+    exampleModels: ["openai/gpt-4o", "microsoft/phi-4", "mistral-ai/mistral-large-2411"],
+    note: "Use a GitHub PAT with the models scope. GitHub Copilot itself has no public chat API for third-party apps — this is Microsoft's supported way in.",
+  },
+  {
+    id: "azure",
+    label: "Azure AI / OpenAI",
+    protocol: "openai",
+    needsKey: true,
+    editableBaseUrl: true,
+    group: "Aggregator",
+    exampleModels: ["gpt-4o", "Llama-3.3-70B-Instruct"],
+    note: "Paste your resource endpoint, e.g. https://<resource>.openai.azure.com/openai/v1",
+  },
+
+  // ---- Local ----
+  {
+    id: "ollama",
+    label: "Ollama (local)",
+    protocol: "ollama",
+    baseUrl: "http://127.0.0.1:11434",
+    needsKey: false,
+    editableBaseUrl: true,
+    group: "Local",
+    exampleModels: ["llama3.2", "qwen2.5", "mistral", "phi4"],
+    note: "Runs on your machine, free. Install from ollama.com, then `ollama pull llama3.2`. Melon tries both 127.0.0.1 and localhost automatically.",
+  },
+  {
+    id: "lmstudio",
+    label: "LM Studio (local)",
+    protocol: "openai",
+    baseUrl: "http://127.0.0.1:1234/v1",
+    needsKey: false,
+    editableBaseUrl: true,
+    group: "Local",
+    exampleModels: ["local-model"],
+    note: "Start the local server from LM Studio's Developer tab.",
+  },
+  {
+    id: "llamacpp",
+    label: "llama.cpp / vLLM (local)",
+    protocol: "openai",
+    baseUrl: "http://127.0.0.1:8080/v1",
+    needsKey: false,
+    editableBaseUrl: true,
+    group: "Local",
+    exampleModels: ["local-model"],
+  },
+  {
+    id: "demo",
+    label: "Melon demo (no key)",
+    protocol: "openai",
+    baseUrl: "http://localhost:5175/api/demo/v1",
+    needsKey: false,
+    editableBaseUrl: false,
+    group: "Local",
+    exampleModels: ["demo"],
+    note: "Built-in fake model for trying the app without any API keys.",
+  },
+
+  // ---- Escape hatch ----
+  {
+    id: "custom",
+    label: "Custom OpenAI-compatible…",
+    protocol: "openai",
+    needsKey: true,
+    editableBaseUrl: true,
+    group: "Custom",
+    exampleModels: [],
+    note: "Any service exposing POST /chat/completions. Most APIs on directories like AIxploria do.",
+  },
+];
+
+export function getProvider(id: string): ProviderDef | undefined {
+  return PROVIDERS.find((p) => p.id === id);
+}
