@@ -1,5 +1,5 @@
 import type { ProviderAdapter, ProviderChatArgs, ProviderResult } from "../types.js";
-import { COT_END } from "../prompts.js";
+import { COT_END, COT_START } from "../prompts.js";
 
 /**
  * The built-in demo model: a fake provider that needs no key and no network.
@@ -75,7 +75,18 @@ function compose(args: ProviderChatArgs): string {
       `press Stop mid-sentence, or switch on more agents and watch them take turns.\n\n` +
       `Switch on a second agent and send this again — the next one will answer *me*, not just repeat the question.`;
 
-  return `${reasoning}\n${COT_END}\n${answer}`;
+  /*
+   * Only show reasoning when the prompt actually asked for it. The system
+   * prompt spells out the exact format when Detailed CoT is switched on, so
+   * looking for the marker there is the same signal a real model acts on —
+   * and it means the demo obeys the setting instead of ignoring it.
+   *
+   * Both markers are required: splitCot looks for COT_START first, and a
+   * response carrying only the closing one renders the reasoning as if it
+   * were the answer.
+   */
+  if (!system.includes(COT_START)) return answer;
+  return `${COT_START}\n${reasoning}\n${COT_END}\n${answer}`;
 }
 
 export const demo: ProviderAdapter = {

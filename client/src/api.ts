@@ -1,3 +1,4 @@
+import { RUNS_LOCALLY } from "./target";
 import type { Agent, AnalyticsSnapshot, Attachment, Bundle, GuardState, RegistryInfo, Settings, Usage } from "./types";
 
 export interface HistoryTurn {
@@ -26,15 +27,24 @@ export interface RunCallbacks {
 }
 
 export async function getAnalytics(): Promise<AnalyticsSnapshot> {
+  if (RUNS_LOCALLY) return (await import("@melon/core")).analytics.snapshot();
   const res = await fetch("/api/analytics");
   return res.json();
 }
 
 export async function resetAnalytics(): Promise<void> {
+  if (RUNS_LOCALLY) {
+    (await import("@melon/core")).analytics.reset();
+    return;
+  }
   await fetch("/api/analytics/reset", { method: "POST" });
 }
 
 export async function flagResponse(provider: string, model: string): Promise<void> {
+  if (RUNS_LOCALLY) {
+    (await import("@melon/core")).analytics.recordFlag(provider, model);
+    return;
+  }
   await fetch("/api/analytics/flag", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -43,6 +53,7 @@ export async function flagResponse(provider: string, model: string): Promise<voi
 }
 
 export async function getMarketplace(): Promise<{ bundles: Bundle[] }> {
+  if (RUNS_LOCALLY) return { bundles: (await import("@melon/core")).BUNDLES as Bundle[] };
   return fetchJson<{ bundles: Bundle[] }>("/api/marketplace");
 }
 
@@ -61,6 +72,16 @@ export interface DetectResult {
 }
 
 export async function detectLocal(): Promise<DetectResult> {
+  if (RUNS_LOCALLY) {
+    // A page cannot scan the visitor's machine for model runtimes, and should
+    // not try. Say so plainly rather than reporting "nothing found".
+    return {
+      runtimes: [],
+      diagnosis:
+        "Local model runtimes can't be detected from a web page. Ollama, LM Studio and llama.cpp " +
+        "need the desktop version of Melon, which runs on your machine and can reach them.",
+    };
+  }
   try {
     const res = await fetch("/api/detect-local");
     const data = await res.json();
@@ -80,6 +101,10 @@ export interface ModelListResult {
 
 /** Ask the provider which models it currently serves. */
 export async function listModels(agent: Agent): Promise<ModelListResult> {
+  if (RUNS_LOCALLY) {
+    // Phase 3 calls the provider directly from here.
+    return { ok: false, message: "Fetching the model list isn't available in the web version yet — type the model id exactly." };
+  }
   try {
     const res = await fetch("/api/list-models", {
       method: "POST",
@@ -101,6 +126,10 @@ export async function listModels(agent: Agent): Promise<ModelListResult> {
 }
 
 export async function testAgent(agent: Agent): Promise<{ ok: boolean; message: string }> {
+  if (RUNS_LOCALLY) {
+    // Phase 3 calls the provider directly from here.
+    return { ok: false, message: "Test connection isn't available in the web version yet — just send a message to try the agent." };
+  }
   try {
     const res = await fetch("/api/test-agent", {
       method: "POST",
@@ -138,19 +167,48 @@ async function fetchJson<T>(url: string, timeoutMs = 4000, init?: RequestInit): 
 }
 
 export async function getRegistry(): Promise<RegistryInfo> {
+  if (RUNS_LOCALLY) {
+    // The catalog is data, not a service — in this build it is simply imported.
+    const core = await import("@melon/core");
+    return {
+      providers: core.PROVIDERS as RegistryInfo["providers"],
+      models: core.MODEL_REGISTRY as RegistryInfo["models"],
+      endpoints: core.COMPAT_PROVIDERS as RegistryInfo["endpoints"],
+      hardCap: core.HARD_AGENT_CAP,
+      recommended: core.RECOMMENDED_AGENTS,
+    };
+  }
   return fetchJson<RegistryInfo>("/api/registry");
 }
 
 export async function getGuard(): Promise<GuardState> {
+  if (RUNS_LOCALLY) {
+    const { tokenGuard } = await import("@melon/core");
+    return {
+      session: tokenGuard.sessionUsage(),
+      budget: tokenGuard.getBudget(),
+      remainingFraction: tokenGuard.remainingFraction(),
+    };
+  }
   const res = await fetch("/api/guard");
   return res.json();
 }
 
 export async function resetGuard(): Promise<void> {
+  if (RUNS_LOCALLY) {
+    (await import("@melon/core")).tokenGuard.reset();
+    return;
+  }
   await fetch("/api/guard/reset", { method: "POST" });
 }
 
 export async function stopTokenFlow(): Promise<void> {
+  if (RUNS_LOCALLY) {
+    // Aborts the very AbortController the orchestrator registered for this
+    // run — the same mechanism the server endpoint reaches for.
+    (await import("@melon/core")).stopController.stopAll();
+    return;
+  }
   await fetch("/api/stop", { method: "POST" });
 }
 
@@ -188,6 +246,12 @@ export async function runConversation(
     })),
   };
 
+  // The hosted build has no server to post to — the core runs right here.
+  if (RUNS_LOCALLY) {
+    await runLocally(body, callbacks);
+    return;
+  }
+
   let res: Response;
   try {
     res = await fetch("/api/run", {
@@ -217,6 +281,36 @@ export async function runConversation(
     } catch {
       return;
     }
+    if (dispatch(event, data, callbacks)) stopped = true;
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, idx).replace(/\r$/, "");
+      buffer = buffer.slice(idx + 1);
+      if (line.startsWith("event:")) {
+        currentEvent = line.slice(6).trim();
+      } else if (line.startsWith("data:")) {
+        handle(currentEvent, line.slice(5).trimStart());
+      }
+    }
+  }
+  callbacks.onRunEnd(stopped);
+}
+
+/**
+ * Turn one orchestrator event into the matching callback.
+ *
+ * Transport-independent on purpose: the events are the same whether they
+ * arrived as SSE frames from a local server or came straight out of the core
+ * running in this page. Returns true for the event that means "the user
+ * stopped this run", which the caller reports at the end.
+ */
+function dispatch(event: string, data: any, callbacks: RunCallbacks): boolean {
     switch (event) {
       case "round-start":
         callbacks.onRoundStart(data.round);
@@ -264,28 +358,62 @@ export async function runConversation(
         callbacks.onGuard(data);
         break;
       case "run-stopped":
-        stopped = true;
-        break;
+        return true;
       case "error":
         callbacks.onError(data.message);
         break;
     }
+  return false;
+}
+
+/**
+ * Run the conversation inside this page, with no server involved.
+ *
+ * The orchestrator is the same code the desktop build runs; only the sink it
+ * emits through differs. There the sink writes SSE frames down an HTTP
+ * response, and this file parses them back out again — a round trip that
+ * exists purely because the two halves were in different processes. Here the
+ * events go straight to the callbacks.
+ *
+ * Imported dynamically so the desktop build never ships the core to the
+ * browser: Vite splits it into a chunk that only the hosted build loads.
+ */
+async function runLocally(body: unknown, callbacks: RunCallbacks): Promise<void> {
+  let core: typeof import("@melon/core");
+  try {
+    core = await import("@melon/core");
+  } catch (err) {
+    callbacks.onError(err instanceof Error ? err.message : "Could not load the Melon core.");
+    return;
+  }
+
+  let stopped = false;
+  let ended = false;
+
+  const sink = {
+    send(event: string, data: unknown) {
+      // The orchestrator may emit after end() in edge cases; ignore rather
+      // than surfacing events for a run the UI has already closed out.
+      if (ended) return;
+      if (dispatch(event, data, callbacks)) stopped = true;
+    },
+    end() {
+      ended = true;
+    },
+    onClose(_handler: () => void) {
+      /*
+       * There is no connection to lose here — the consumer is the page
+       * itself. Stop is delivered through stopController instead, which
+       * aborts the same AbortController the orchestrator registered, so
+       * nothing is lost by leaving this empty.
+       */
+    },
   };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let idx: number;
-    while ((idx = buffer.indexOf("\n")) >= 0) {
-      const line = buffer.slice(0, idx).replace(/\r$/, "");
-      buffer = buffer.slice(idx + 1);
-      if (line.startsWith("event:")) {
-        currentEvent = line.slice(6).trim();
-      } else if (line.startsWith("data:")) {
-        handle(currentEvent, line.slice(5).trimStart());
-      }
-    }
+  try {
+    await core.runConversation(body as Parameters<typeof core.runConversation>[0], sink);
+  } catch (err) {
+    callbacks.onError(err instanceof Error ? err.message : String(err));
   }
   callbacks.onRunEnd(stopped);
 }
