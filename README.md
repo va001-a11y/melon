@@ -44,7 +44,7 @@ npm install && npm run dev
 Presets export as plain **`.json`** (`melon-preset-YYYY-MM-DD.json`), deliberately: anyone can open one in a text editor and see exactly what they are about to share or import. That transparency is the point — an opaque format would hide whether a secret slipped in.
 
 **Secrets never leave the browser.** On export the API key is omitted entirely, and the base URL is stripped of query parameters and any embedded `user:pass@` credentials, because some APIs accept a key in the URL. On import Melon discards any `apiKey` it finds — a preset must never spend someone else's quota — and warns you so you can tell the sender to revoke it.
-- **Support button** — an optional ☕ link in the top bar. Set your own URL in [`client/src/config.ts`](platform/client/src/config.ts); set it to `""` to hide the button.
+- **Support button** — an ☕ link in the top bar.
 - **Chats panel** — pinned at the top of the sidebar, well separated from Agents at the bottom so a stray click can't hit the wrong one. Conversations save automatically; double-click or right-click to rename (your title is never overwritten), and opening a chat moves it to the top of the list.
 - **Calm interface** — warm off-white paper with muted sage and clay accents, following your system light/dark preference. Nothing pure-white or pure-black, so long sessions stay easy on the eyes.
 - **Agent editing in place** — right-click any agent → *Edit properties* opens the form pre-filled; change anything and save without deleting the agent.
