@@ -14,7 +14,8 @@
     "build": "npm run build -w core && npm run build -w server && npm run build -w client",
     "start": "npm run start -w server",
     "melon": "node scripts/launch.mjs",
-    "package": "node scripts/package.mjs"
+    "package": "node scripts/package.mjs",
+    "web": "npm run dev:web -w client"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

@@ -17,6 +17,8 @@ Melon-*.zip
 # so there should be nothing here — this is a backstop, not a routine.
 .env
 .env.*
+# ...except the web-target flag, which is a build switch, not a secret.
+!client/.env.web
 *.key
 *.pem
 

@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:web": "vite --mode web --port 5180",
+    "build:web": "vite build --mode web",
+    "preview:web": "vite preview --mode web --port 5180"
   },
   "dependencies": {
     "@melon/core": "*",
