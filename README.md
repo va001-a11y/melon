@@ -113,6 +113,44 @@ The zip still has a job: attach it to a **GitHub Release**, for people who would
 
 One thing to avoid: **don't email the zip.** Gmail blocks `.bat` attachments outright, including inside archives, and a downloaded `.bat` gets tagged by Windows so SmartScreen challenges it on first run. Send a link to the release instead — the same file, without the warnings.
 
+
+## The web version
+
+Melon also builds as a static site that runs entirely in the browser — no
+Node, no install, no server. The same core does the orchestrating; only the
+transport differs.
+
+```bash
+npm run web
+```
+
+Then open **http://127.0.0.1:5180/melon/**.
+
+Two things are not available there, and the app says so rather than failing
+quietly:
+
+- **Local models.** Ollama, LM Studio and llama.cpp run on your machine, which
+  a web page cannot reach.
+- **Three providers** — NVIDIA NIM, Cerebras and GitHub Models — refuse
+  cross-origin browser requests. That block is theirs, not something Melon can
+  work around.
+
+Both appear in the provider list, greyed out with the reason attached, so it
+is clear what the desktop version adds rather than looking like a shorter
+list. The other 17 work exactly as they do on the desktop, and keys still go
+straight from your browser to the provider.
+
+### Publishing it
+
+`.github/workflows/pages.yml` builds and deploys to GitHub Pages on any `v*`
+tag, or on demand from the Actions tab. It needs **Settings → Pages → Source:
+GitHub Actions** switched on once; after that a release publishes the web
+version as a side effect of tagging.
+
+The `/melon/` path in the URL is the repo name — GitHub serves project sites
+from a subdirectory, and that prefix is baked into the build. A custom domain
+would make it `/` again (`client/vite.config.ts`).
+
 ## Adding models
 
 Pick a provider from the grouped list, **type the model id exactly** as the provider writes it (lower case, dashes instead of spaces — e.g. `llama-3.3-70b-versatile`), paste your key, and press **Test connection** before saving.

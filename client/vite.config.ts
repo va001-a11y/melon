@@ -7,7 +7,28 @@ import react from "@vitejs/plugin-react";
 const clientPort = Number(process.env.MELON_CLIENT_PORT) || 5173;
 const serverPort = Number(process.env.MELON_SERVER_PORT) || 5175;
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  /*
+   * GitHub Pages serves a project site from /<repo>/, not the domain root, so
+   * every asset URL in the hosted build needs that prefix baked in — including
+   * the pdf.js worker, which is fetched at runtime rather than being written
+   * into the HTML. The desktop build is served from the root and must not
+   * carry the prefix, so this follows the same "web" mode that selects the
+   * browser target.
+   *
+   * Applied whenever the target is "web", not only when building. `vite
+   * preview` runs with command "serve", so restricting this to builds left it
+   * serving from the root while the built HTML asked for /melon/ — every asset
+   * fell through to the SPA fallback and came back as text/html, which a
+   * module script refuses to execute. The app simply never started.
+   *
+   * Keeping dev, preview and production on the same base costs one path
+   * segment in the local URL and removes a whole class of that bug.
+   *
+   * If Melon ever moves to a custom domain, this becomes "/" again.
+   */
+  base: mode === "web" ? "/melon/" : "/",
+
   plugins: [react()],
   server: {
     port: clientPort,
@@ -22,4 +43,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

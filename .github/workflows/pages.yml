@@ -1,0 +1,62 @@
+name: Deploy web version
+
+# Publishes the browser build to GitHub Pages.
+#
+# Runs on a version tag, so what is live always corresponds to a release
+# rather than to whatever last landed on main — and manually, so a deploy can
+# be tested or re-run without inventing a tag.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  # Required by actions/deploy-pages: it exchanges an OIDC token rather than
+  # holding a long-lived secret.
+  id-token: write
+
+# Let a running deploy finish rather than cancelling it half-published.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `npm ci` installs exactly what package-lock.json pins, so a deploy can
+      # never quietly pick up a different dependency version than the one that
+      # was tested.
+      - run: npm ci
+
+      # Typecheck everything, not just the web bundle. The core is shared, so
+      # a break here would reach the desktop build too.
+      - run: npm run build
+
+      # --mode web selects the browser target (client/.env.web) and the
+      # /melon/ base path that a project site needs.
+      - run: npm run build:web -w client
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: client/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
