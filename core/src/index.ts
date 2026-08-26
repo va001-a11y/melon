@@ -16,8 +16,8 @@ export { runConversation } from "./orchestrator.js";
 
 export * from "./types.js";
 
-export { PROVIDERS, contextWindowFor } from "./catalog.js";
-export type { ProviderDef } from "./catalog.js";
+export { PROVIDERS, contextWindowFor, browserBlockReason, usableInBrowser } from "./catalog.js";
+export type { ProviderDef, BrowserSupport } from "./catalog.js";
 
 export {
   COMPAT_PROVIDERS,
@@ -30,6 +30,8 @@ export { computeDynamicLimit, estimateTokens, tokenGuard } from "./guard.js";
 export { analytics } from "./analytics.js";
 export { stopController } from "./stop.js";
 export { BUNDLES } from "./marketplace.js";
+export { listModelsFor, testAgentConnection } from "./models.js";
+export type { ModelListResult } from "./models.js";
 export { resolveTarget } from "./providers/index.js";
 
 export {

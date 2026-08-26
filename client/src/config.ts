@@ -14,3 +14,12 @@ export const SUPPORT_URL = "https://buymeacoffee.com/melon_ai";
  */
 export const SUPPORT_LABEL =
   "Melon is free, with no accounts and no paywall. Support is voluntary and goes to building it. Or if you just want to say thanks.";
+
+/**
+ * Where the hosted build sends people who need the desktop version — local
+ * models, or one of the providers that refuses browser requests.
+ *
+ * Points at the latest release rather than a fixed tag, so it keeps working
+ * as new versions ship.
+ */
+export const DESKTOP_URL = "https://github.com/va001-a11y/melon/releases/latest";

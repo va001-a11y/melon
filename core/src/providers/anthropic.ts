@@ -19,6 +19,18 @@ export const anthropic: ProviderAdapter = {
           "content-type": "application/json",
           "x-api-key": apiKey,
           "anthropic-version": "2023-06-01",
+          /*
+           * Anthropic refuses cross-origin browser requests unless the caller
+           * opts in with this header, which exists to make the tradeoff
+           * explicit: calling the API from a page means the key lives in that
+           * page. That is already how Melon works — keys are the user's own
+           * and never leave their browser except to the provider — so the
+           * header states a fact rather than adding risk.
+           *
+           * Sent only from a browser. On the desktop build the request
+           * originates from the local Node process, where it means nothing.
+           */
+          ...(typeof window === "undefined" ? {} : { "anthropic-dangerous-direct-browser-access": "true" }),
         },
         body: JSON.stringify({
           model,

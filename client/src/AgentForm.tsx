@@ -1,5 +1,8 @@
 import { useMemo, useState } from "react";
 import type { Agent, ProviderDef } from "./types";
+import { browserBlockReason } from "@melon/core";
+import { RUNS_LOCALLY } from "./target";
+import { DESKTOP_URL } from "./config";
 import { ROLES } from "./defaults";
 import { detectLocal, listModels, testAgent } from "./api";
 import type { LocalRuntime } from "./api";
@@ -68,6 +71,12 @@ export function AgentForm({ draft, setDraft, providers, editingName, onSave, onR
   // Live lists beat local scans, which beat the static examples.
   const modelOptions =
     fetched.models.length > 0 ? fetched.models : detected.length > 0 ? detected : def?.exampleModels ?? [];
+
+  /** Whether the note under the picker is needed at all. */
+  const anyBlocked = useMemo(
+    () => RUNS_LOCALLY && providers.some((p) => browserBlockReason(p) !== null),
+    [providers]
+  );
 
   const groups = useMemo(() => {
     const map = new Map<string, ProviderDef[]>();
@@ -178,15 +187,39 @@ export function AgentForm({ draft, setDraft, providers, editingName, onSave, onR
           <select value={draft.provider} onChange={(e) => changeProvider(e.target.value)}>
             {groups.map(([group, list]) => (
               <optgroup key={group} label={group}>
-                {list.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
+                {list.map((p) => {
+                  /*
+                   * Unreachable providers stay listed rather than being
+                   * filtered out. Hiding them would make the web version look
+                   * like it supports fewer models than it does, and leave no
+                   * clue that the desktop build can reach them.
+                   */
+                  const blocked = RUNS_LOCALLY ? browserBlockReason(p) : null;
+                  return (
+                    <option key={p.id} value={p.id} disabled={!!blocked}>
+                      {blocked ? `${p.label} — desktop only (${blocked})` : p.label}
+                    </option>
+                  );
+                })}
               </optgroup>
             ))}
           </select>
         </label>
+      )}
+
+      {/*
+        Said once beneath the picker rather than repeated on every entry, and
+        only when something is actually greyed out.
+      */}
+      {RUNS_LOCALLY && anyBlocked && (
+        <p className="provider-note provider-note-blocked">
+          Greyed-out providers can't be reached from a web page — they either refuse browser
+          requests or run on your own machine. The{" "}
+          <a href={DESKTOP_URL} target="_blank" rel="noreferrer noopener">
+            desktop version
+          </a>{" "}
+          reaches all {providers.length}.
+        </p>
       )}
 
       {def?.note && <p className="provider-note">{def.note}</p>}

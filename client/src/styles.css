@@ -2553,3 +2553,13 @@ body {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* Explains the greyed-out entries in the provider picker (hosted build). */
+.provider-note-blocked {
+  border-left: 2px solid var(--warm);
+  padding-left: 10px;
+}
+
+.provider-note-blocked a {
+  color: var(--accent);
+}

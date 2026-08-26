@@ -4,7 +4,7 @@ import type { AgentSpec, RunRequest } from "@melon/core";
 import { BUNDLES, COMPAT_PROVIDERS, HARD_AGENT_CAP, MODEL_REGISTRY, PROVIDERS, RECOMMENDED_AGENTS, analytics, resolveTarget, runConversation, stopController, tokenGuard } from "@melon/core";
 import { execFile } from "node:child_process";
 import { extractPdf } from "./files.js";
-import { listModels } from "./models.js";
+import { listModels, testAgent } from "./models.js";
 
 // Deliberately not process.env.PORT: dev launchers set PORT for the
 // front-end and would collide the API server onto Vite's port.
@@ -120,43 +120,7 @@ app.get("/api/detect-local", async (_req, res) => {
 });
 
 /** Send one tiny message to check an agent's provider/model/key really work. */
-app.post("/api/test-agent", async (req, res) => {
-  const agent = req.body as AgentSpec;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20000);
-  try {
-    const target = resolveTarget(agent);
-    if (target.needsKey && !agent.apiKey?.trim()) {
-      res.json({ ok: false, message: `${target.label} needs an API key.` });
-      return;
-    }
-    let got = "";
-    await target.adapter.chat({
-      model: agent.model,
-      apiKey: agent.apiKey,
-      baseUrl: target.baseUrl,
-      providerLabel: target.label,
-      system: "Reply with the single word: ok",
-      messages: [{ role: "user", content: "Say ok." }],
-      maxOutputTokens: 16,
-      signal: controller.signal,
-      handlers: {
-        onToken: (t) => {
-          got += t;
-        },
-      },
-    });
-    res.json({
-      ok: true,
-      message: `${target.label} responded${got.trim() ? `: “${got.trim().slice(0, 60)}”` : "."}`,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    res.json({ ok: false, message: controller.signal.aborted ? "Timed out after 20s." : message });
-  } finally {
-    clearTimeout(timer);
-  }
-});
+app.post("/api/test-agent", testAgent);
 
 app.get("/api/analytics", (_req, res) => {
   res.json(analytics.snapshot());

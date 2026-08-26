@@ -99,11 +99,26 @@ export interface ModelListResult {
   message?: string;
 }
 
+
+/** The subset of an agent a provider call needs. */
+function toSpec(agent: Agent) {
+  return {
+    id: agent.id,
+    name: agent.name,
+    provider: agent.provider,
+    model: agent.model,
+    apiKey: agent.apiKey || undefined,
+    baseUrl: agent.baseUrl || undefined,
+    role: agent.role,
+  };
+}
+
 /** Ask the provider which models it currently serves. */
 export async function listModels(agent: Agent): Promise<ModelListResult> {
   if (RUNS_LOCALLY) {
-    // Phase 3 calls the provider directly from here.
-    return { ok: false, message: "Fetching the model list isn't available in the web version yet — type the model id exactly." };
+    // Straight to the provider — same code the server route runs.
+    const { listModelsFor } = await import("@melon/core");
+    return listModelsFor(toSpec(agent));
   }
   try {
     const res = await fetch("/api/list-models", {
@@ -127,8 +142,8 @@ export async function listModels(agent: Agent): Promise<ModelListResult> {
 
 export async function testAgent(agent: Agent): Promise<{ ok: boolean; message: string }> {
   if (RUNS_LOCALLY) {
-    // Phase 3 calls the provider directly from here.
-    return { ok: false, message: "Test connection isn't available in the web version yet — just send a message to try the agent." };
+    const { testAgentConnection } = await import("@melon/core");
+    return testAgentConnection(toSpec(agent));
   }
   try {
     const res = await fetch("/api/test-agent", {

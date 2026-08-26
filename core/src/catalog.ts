@@ -8,6 +8,20 @@
  */
 export type Protocol = "openai" | "anthropic" | "google" | "ollama" | "demo";
 
+/**
+ * How a provider behaves when called straight from a web page.
+ *
+ * "ok"          — verified working from a browser origin.
+ * "needs-header"— works, but only with an extra opt-in request header.
+ * "cors-blocked"— verified to refuse browser requests. Nothing on our side
+ *                 can change this; the block is the provider's.
+ * "local-only"  — a service on the user's own machine, which a page served
+ *                 over HTTPS cannot reach.
+ * "unverified"  — the endpoint is supplied by the user, so whether it allows
+ *                 browser calls depends on how they configured it.
+ */
+export type BrowserSupport = "ok" | "needs-header" | "cors-blocked" | "local-only" | "unverified";
+
 export interface ProviderDef {
   id: string;
   label: string;
@@ -23,6 +37,20 @@ export interface ProviderDef {
   /** Grouping for the picker. */
   group: "Frontier" | "Open & fast" | "Aggregator" | "Local" | "Search" | "Custom";
   note?: string;
+  /**
+   * Whether this provider can be reached directly from a web page.
+   *
+   * The hosted build has no server to proxy through, so a provider that
+   * refuses cross-origin browser requests simply cannot be used there. These
+   * values come from testing each endpoint from a real browser origin, not
+   * from reading documentation — several providers document CORS support they
+   * do not actually send headers for.
+   *
+   * Providers marked unreachable are still listed in the picker, disabled and
+   * carrying the reason: quietly dropping them would make the hosted build
+   * look like it supports fewer models than it does.
+   */
+  browser?: BrowserSupport;
   /** Conservative context window in tokens. Omitted entries use a safe default. */
   contextWindow?: number;
   /** Whether this provider accepts image attachments. */
@@ -50,6 +78,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://console.anthropic.com/settings/keys",
+    browser: "needs-header",
     group: "Frontier",
     exampleModels: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
     contextWindow: 200000,
@@ -63,6 +92,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://platform.openai.com/api-keys",
+    browser: "ok",
     group: "Frontier",
     exampleModels: ["gpt-5", "gpt-5-mini", "gpt-4o"],
     contextWindow: 272000,
@@ -76,6 +106,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://aistudio.google.com/apikey",
+    browser: "ok",
     group: "Frontier",
     exampleModels: ["gemini-2.5-pro", "gemini-2.5-flash"],
     contextWindow: 1000000,
@@ -89,6 +120,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://console.x.ai",
+    browser: "ok",
     group: "Frontier",
     exampleModels: ["grok-4", "grok-3-mini"],
     contextWindow: 256000,
@@ -102,6 +134,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://console.mistral.ai/api-keys",
+    browser: "ok",
     group: "Frontier",
     exampleModels: ["mistral-large-latest", "mistral-small-latest", "magistral-medium-latest"],
     contextWindow: 128000,
@@ -115,6 +148,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://platform.deepseek.com/api_keys",
+    browser: "ok",
     group: "Frontier",
     exampleModels: ["deepseek-chat", "deepseek-reasoner"],
     contextWindow: 128000,
@@ -127,6 +161,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://dashboard.cohere.com/api-keys",
+    browser: "ok",
     group: "Frontier",
     exampleModels: ["command-a-03-2025", "command-r-plus"],
   },
@@ -140,6 +175,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://www.perplexity.ai/settings/api",
+    browser: "ok",
     group: "Search",
     exampleModels: ["sonar-pro", "sonar", "sonar-reasoning-pro"],
     contextWindow: 128000,
@@ -155,6 +191,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://build.nvidia.com",
+    browser: "cors-blocked",
     group: "Open & fast",
     exampleModels: [
       "nvidia/llama-3.3-nemotron-super-49b-v1.5",
@@ -171,6 +208,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://platform.moonshot.ai/console/api-keys",
+    browser: "ok",
     group: "Open & fast",
     exampleModels: ["kimi-k2-0711-preview", "moonshot-v1-128k"],
   },
@@ -182,6 +220,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://console.groq.com/keys",
+    browser: "ok",
     group: "Open & fast",
     exampleModels: ["llama-3.3-70b-versatile", "qwen-2.5-32b"],
     contextWindow: 128000,
@@ -194,6 +233,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://cloud.cerebras.ai",
+    browser: "cors-blocked",
     group: "Open & fast",
     exampleModels: ["llama-3.3-70b", "qwen-3-32b"],
   },
@@ -205,6 +245,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://api.together.ai/settings/api-keys",
+    browser: "ok",
     group: "Open & fast",
     exampleModels: ["meta-llama/Llama-3.3-70B-Instruct-Turbo", "deepseek-ai/DeepSeek-V3"],
   },
@@ -216,6 +257,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://fireworks.ai/account/api-keys",
+    browser: "ok",
     group: "Open & fast",
     exampleModels: ["accounts/fireworks/models/llama-v3p3-70b-instruct"],
   },
@@ -227,6 +269,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://deepinfra.com/dash/api_keys",
+    browser: "ok",
     group: "Open & fast",
     exampleModels: ["meta-llama/Llama-3.3-70B-Instruct", "Qwen/Qwen2.5-72B-Instruct"],
   },
@@ -240,6 +283,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://openrouter.ai/keys",
+    browser: "ok",
     group: "Aggregator",
     exampleModels: ["anthropic/claude-sonnet-5", "google/gemini-2.5-pro", "meta-llama/llama-3.3-70b-instruct"],
     contextWindow: 128000,
@@ -254,6 +298,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://github.com/settings/tokens",
+    browser: "cors-blocked",
     group: "Aggregator",
     exampleModels: ["openai/gpt-4o", "microsoft/phi-4", "mistral-ai/mistral-large-2411"],
     note: "Use a GitHub PAT with the models scope. GitHub Copilot itself has no public chat API for third-party apps — this is Microsoft's supported way in.",
@@ -264,6 +309,7 @@ export const PROVIDERS: ProviderDef[] = [
     protocol: "openai",
     needsKey: true,
     editableBaseUrl: true,
+    browser: "unverified",
     group: "Aggregator",
     exampleModels: ["gpt-4o", "Llama-3.3-70B-Instruct"],
     note: "Paste your resource endpoint, e.g. https://<resource>.openai.azure.com/openai/v1",
@@ -277,6 +323,7 @@ export const PROVIDERS: ProviderDef[] = [
     baseUrl: "http://127.0.0.1:11434",
     needsKey: false,
     editableBaseUrl: true,
+    browser: "local-only",
     group: "Local",
     exampleModels: ["llama3.2", "qwen2.5", "mistral", "phi4"],
     note: "Runs on your machine, free. Install from ollama.com, then `ollama pull llama3.2`. Melon tries both 127.0.0.1 and localhost automatically.",
@@ -288,6 +335,7 @@ export const PROVIDERS: ProviderDef[] = [
     baseUrl: "http://127.0.0.1:1234/v1",
     needsKey: false,
     editableBaseUrl: true,
+    browser: "local-only",
     group: "Local",
     exampleModels: ["local-model"],
     note: "Start the local server from LM Studio's Developer tab.",
@@ -299,6 +347,7 @@ export const PROVIDERS: ProviderDef[] = [
     baseUrl: "http://127.0.0.1:8080/v1",
     needsKey: false,
     editableBaseUrl: true,
+    browser: "local-only",
     group: "Local",
     exampleModels: ["local-model"],
   },
@@ -310,6 +359,7 @@ export const PROVIDERS: ProviderDef[] = [
     protocol: "demo",
     needsKey: false,
     editableBaseUrl: false,
+    browser: "ok",
     group: "Local",
     exampleModels: ["melon-demo"],
     note: "Built-in fake model. No key, no network — try Melon before adding a provider.",
@@ -322,6 +372,7 @@ export const PROVIDERS: ProviderDef[] = [
     protocol: "openai",
     needsKey: true,
     editableBaseUrl: true,
+    browser: "unverified",
     group: "Custom",
     exampleModels: [],
     note: "Any service exposing POST /chat/completions. Most APIs on directories like AIxploria do.",
@@ -330,4 +381,28 @@ export const PROVIDERS: ProviderDef[] = [
 
 export function getProvider(id: string): ProviderDef | undefined {
   return PROVIDERS.find((p) => p.id === id);
+}
+
+/**
+ * Why a provider cannot be used from a web page, phrased for the person
+ * choosing it — or null when it works fine there.
+ *
+ * Lives here rather than in the UI so the explanation stays next to the fact
+ * it explains: if a provider's `browser` value changes, the wording it
+ * produces changes with it.
+ */
+export function browserBlockReason(def: ProviderDef): string | null {
+  switch (def.browser) {
+    case "cors-blocked":
+      return "blocked by the provider in browsers";
+    case "local-only":
+      return "runs on your own machine";
+    default:
+      return null;
+  }
+}
+
+/** Can this provider be used in a build with no server behind it? */
+export function usableInBrowser(def: ProviderDef): boolean {
+  return browserBlockReason(def) === null;
 }
