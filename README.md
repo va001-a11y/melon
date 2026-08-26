@@ -155,7 +155,3 @@ client (Vite/React :5173)
 ```
 
 Key server modules: `orchestrator.ts` (round loop + SSE), `catalog.ts` (providers, context windows, vision support), `stop.ts` (circuit breaker), `guard.ts` (token guard + dynamic limit), `prompts.ts` (roles, tones, personality, reasoning contract), `files.ts` (PDF extraction). Client theming lives in `client/src/themes.ts`, cost modelling in `client/src/cost.ts`.
-
-## Roadmap status
-
-Phases 1–3 of the original blueprint are implemented. Natural next steps beyond it: persisting analytics across server restarts (currently in-memory per process), a hosted bundle registry so the marketplace can pull community teams over the network, and adapters for non-chat modalities (image/video/voice) if the platform should reach beyond conversational models.
