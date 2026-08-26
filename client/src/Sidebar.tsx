@@ -273,12 +273,19 @@ export function Sidebar(props: Props) {
             + New
           </button>
         </div>
-        {chats.length > 3 && (
+        {/*
+          Shown from the second chat onwards. It was hidden below four, to keep
+          the sidebar quiet — but a control nobody can see is a control nobody
+          knows exists, and the search covers message text as well as titles,
+          which is not guessable. Two chats is early enough to teach it and
+          late enough not to clutter a fresh install.
+        */}
+        {chats.length > 1 && (
           <input
             className="chat-search"
             value={chatQuery}
             onChange={(e) => setChatQuery(e.target.value)}
-            placeholder="Search chats…"
+            placeholder="Search chats and messages…"
           />
         )}
         <div className="chat-list">
