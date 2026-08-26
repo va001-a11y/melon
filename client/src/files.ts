@@ -1,4 +1,5 @@
 import type { Attachment } from "./types";
+import { extractPdfText } from "./pdf";
 
 const IMAGE_MIMES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
@@ -71,26 +72,21 @@ export async function prepareFile(file: File): Promise<PrepareResult> {
   }
 
   if (kind === "pdf") {
-    try {
-      const res = await fetch("/api/extract-pdf", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: file.name, data: await readAsBase64(file) }),
-      });
-      const result = await res.json();
-      if (!result.ok) return { error: result.message ?? `Could not read “${file.name}”.` };
-      return {
-        attachment: {
-          name: file.name,
-          mime: "text/plain",
-          kind: "text",
-          data: result.text,
-          size: file.size,
-        },
-      };
-    } catch {
-      return { error: `Could not read “${file.name}” — the Melon server did not respond.` };
+    // Extracted here rather than on a server: the file is already in the
+    // browser, and this is the one path that works in both builds.
+    const result = await extractPdfText(file);
+    if (!result.ok || !result.text) {
+      return { error: result.message ?? `Could not read “${file.name}”.` };
     }
+    return {
+      attachment: {
+        name: file.name,
+        mime: "text/plain",
+        kind: "text",
+        data: result.text,
+        size: file.size,
+      },
+    };
   }
 
   const isAudioOrVideo = file.type.startsWith("audio/") || file.type.startsWith("video/");

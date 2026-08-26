@@ -3,7 +3,6 @@ import { sseSink } from "./sse.js";
 import type { AgentSpec, RunRequest } from "@melon/core";
 import { BUNDLES, COMPAT_PROVIDERS, HARD_AGENT_CAP, MODEL_REGISTRY, PROVIDERS, RECOMMENDED_AGENTS, analytics, resolveTarget, runConversation, stopController, tokenGuard } from "@melon/core";
 import { execFile } from "node:child_process";
-import { extractPdf } from "./files.js";
 import { listModels, testAgent } from "./models.js";
 
 // Deliberately not process.env.PORT: dev launchers set PORT for the
@@ -41,7 +40,11 @@ app.get("/api/registry", (_req, res) => {
   });
 });
 
-app.post("/api/extract-pdf", extractPdf);
+/*
+ * /api/extract-pdf is gone. PDFs are read in the browser now (client/src/pdf.ts),
+ * which removes a multi-megabyte base64 round trip through this process and
+ * means the hosted build handles them too.
+ */
 
 /** Ask a provider which models it currently serves. */
 app.post("/api/list-models", listModels);
