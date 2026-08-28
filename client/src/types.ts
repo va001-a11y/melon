@@ -11,8 +11,8 @@
  */
 // Imported for use below, and re-exported so the rest of the app can keep
 // importing them from "./types" without knowing where they really live.
-import type { ProviderId, Usage, ProviderDef, Attachment as CoreAttachment } from "@melon/core";
-export type { ProviderId, Usage, ProviderDef };
+import type { ProviderId, Usage, ProviderDef, Citation, Attachment as CoreAttachment } from "@melon/core";
+export type { ProviderId, Usage, ProviderDef, Citation };
 
 export interface Agent {
   id: string;
@@ -179,6 +179,8 @@ export interface AgentResponse {
   finishReason?: "stop" | "length" | "filtered" | "unknown";
   /** The reply-length cap in force at the time, for a precise explanation. */
   replyLimit?: number;
+  /** Pages the model consulted, when web search was on. */
+  citations?: Citation[];
 }
 
 export interface RunMessage {

@@ -192,6 +192,23 @@ function sanitizeMessages(raw: unknown): Message[] {
       if (r.status === "streaming" || r.status === "pending") {
         responses[id] = { ...r, status: "stopped" };
       }
+      /*
+       * Citations become clickable links, so re-check them here rather than
+       * trusting that they came from the collector that first filtered them.
+       * These arrive from localStorage, which is editable by hand and by any
+       * script that has run on this origin — a stored `javascript:` URL would
+       * otherwise be rendered as a live link.
+       */
+      const cites = responses[id].citations;
+      if (cites !== undefined) {
+        const safe = Array.isArray(cites)
+          ? cites.filter(
+              (c): c is { url: string; title?: string } =>
+                !!c && typeof c === "object" && typeof c.url === "string" && /^https?:\/\//i.test(c.url)
+            )
+          : [];
+        responses[id] = { ...responses[id], citations: safe.length > 0 ? safe : undefined };
+      }
     }
 
     out.push({
@@ -446,6 +463,7 @@ export default function App() {
             usage,
             finishReason: meta?.finishReason as AgentResponse["finishReason"],
             replyLimit: meta?.replyLimit,
+            citations: meta?.citations,
           })),
         onAgentError: (id, message, round) =>
           updateRun(at(round), id, (r) => ({ ...r, status: "error", error: message })),
@@ -551,6 +569,7 @@ export default function App() {
               usage,
               finishReason: meta?.finishReason as AgentResponse["finishReason"],
               replyLimit: meta?.replyLimit,
+              citations: meta?.citations,
             })),
           onAgentError: (id, message) => updateRun(blockId, id, (r) => ({ ...r, status: "error", error: message })),
           onAgentStopped: (id) => updateRun(blockId, id, (r) => ({ ...r, status: "stopped" })),

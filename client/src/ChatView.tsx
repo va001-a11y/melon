@@ -36,6 +36,18 @@ interface Props {
 
 
 /**
+ * The bare domain of a source, shown beside its title so it is obvious where
+ * a claim came from without reading the whole URL.
+ */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+/**
  * Fork the conversation at this point.
  *
  * Deliberately quiet — it only surfaces on hover, because it appears on every
@@ -216,6 +228,32 @@ function AgentCard({
           {formatted ? <Markdown text={answer} /> : answer}
         </div>
       )}
+      {/*
+        Where the answer came from, when the agent searched. Without this the
+        search is invisible: the reply is better informed but there is no way
+        to check it, which is the opposite of what a research tool should do.
+
+        Collapsed by default — a search can cite a dozen pages, and expanding
+        every card by default would bury the answers.
+      */}
+      {response.citations && response.citations.length > 0 && (
+        <details className="sources">
+          <summary>
+            🔗 {response.citations.length} source{response.citations.length === 1 ? "" : "s"}
+          </summary>
+          <ol>
+            {response.citations.map((c) => (
+              <li key={c.url}>
+                <a href={c.url} target="_blank" rel="noreferrer noopener" title={c.url}>
+                  {c.title || hostOf(c.url)}
+                </a>
+                <span className="source-host">{c.title ? hostOf(c.url) : ""}</span>
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
+
       {/* A reply that stops mid-sentence should always say why. */}
       {response.status === "done" && response.finishReason === "length" && (
         <div className="cutoff-note">

@@ -1,5 +1,5 @@
 import { RUNS_LOCALLY } from "./target";
-import type { Agent, AnalyticsSnapshot, Attachment, Bundle, GuardState, RegistryInfo, Settings, Usage } from "./types";
+import type { Agent, AnalyticsSnapshot, Attachment, Bundle, Citation, GuardState, RegistryInfo, Settings, Usage } from "./types";
 
 export interface HistoryTurn {
   role: "user" | "assistant";
@@ -11,7 +11,12 @@ export interface RunCallbacks {
   onRoundStart: (round: number) => void;
   onAgentStart: (agentId: string, round?: number) => void;
   onToken: (agentId: string, text: string, round?: number) => void;
-  onAgentDone: (agentId: string, usage: Usage, round?: number, meta?: { finishReason?: string; replyLimit?: number }) => void;
+  onAgentDone: (
+    agentId: string,
+    usage: Usage,
+    round?: number,
+    meta?: { finishReason?: string; replyLimit?: number; citations?: Citation[] }
+  ) => void;
   onAgentError: (agentId: string, message: string, round?: number) => void;
   onAgentStopped: (agentId: string, round?: number) => void;
   onAgentThrottled: (agentId: string, round?: number) => void;
@@ -341,6 +346,7 @@ function dispatch(event: string, data: any, callbacks: RunCallbacks): boolean {
         callbacks.onAgentDone(data.agentId, data.usage, data.round, {
           finishReason: data.finishReason,
           replyLimit: data.replyLimit,
+          citations: data.citations,
         });
         break;
       case "agent-error":

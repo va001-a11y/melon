@@ -1,4 +1,5 @@
 import type { FinishReason, ProviderAdapter, ProviderChatArgs, ProviderResult } from "../types.js";
+import { CitationCollector } from "./citations.js";
 import { describeNetworkError, fetchLocalAware, readStreamLines, throwHttpError } from "./sse.js";
 import { imageAttachments, inlineTextAttachments } from "./attachments.js";
 
@@ -88,6 +89,7 @@ export const openai: ProviderAdapter = {
     let inputTokens = 0;
     let outputTokens = 0;
     let finishReason: FinishReason | undefined;
+    const sources = new CitationCollector();
     for await (const data of readStreamLines(res.body!, "sse")) {
       if (data === "[DONE]") break;
       let event: any;
@@ -113,6 +115,19 @@ export const openai: ProviderAdapter = {
         text += delta;
         await handlers.onToken(delta);
       }
+      /*
+       * url_citation annotations. OpenRouter and OpenAI's search models both
+       * use this shape; it can arrive on the streaming delta or on a final
+       * non-streamed message, so both are read.
+       */
+      const annotations =
+        event.choices?.[0]?.delta?.annotations ?? event.choices?.[0]?.message?.annotations;
+      if (Array.isArray(annotations)) {
+        for (const a of annotations) {
+          const cite = a?.url_citation ?? a;
+          sources.add(cite?.url, cite?.title);
+        }
+      }
       const reason = event.choices?.[0]?.finish_reason;
       if (reason) {
         finishReason =
@@ -129,6 +144,6 @@ export const openai: ProviderAdapter = {
         outputTokens = event.usage.completion_tokens ?? outputTokens;
       }
     }
-    return { text, usage: { inputTokens, outputTokens }, finishReason };
+    return { text, usage: { inputTokens, outputTokens }, finishReason, citations: sources.list() };
   },
 };

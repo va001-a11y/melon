@@ -1,4 +1,5 @@
 import type { FinishReason, ProviderAdapter, ProviderChatArgs, ProviderResult } from "../types.js";
+import { CitationCollector } from "./citations.js";
 import { describeNetworkError, readStreamLines, throwHttpError } from "./sse.js";
 import { imageAttachments, inlineTextAttachments } from "./attachments.js";
 
@@ -70,6 +71,7 @@ export const anthropic: ProviderAdapter = {
     let inputTokens = 0;
     let outputTokens = 0;
     let finishReason: FinishReason | undefined;
+    const sources = new CitationCollector();
     for await (const data of readStreamLines(res.body!, "sse")) {
       if (data === "[DONE]") break;
       let event: any;
@@ -82,10 +84,25 @@ export const anthropic: ProviderAdapter = {
         case "message_start":
           inputTokens = event.message?.usage?.input_tokens ?? 0;
           break;
+        case "content_block_start": {
+          // The tool-result block lists everything the search returned,
+          // including pages the answer ends up not quoting.
+          const block = event.content_block;
+          if (block?.type === "web_search_tool_result" && Array.isArray(block.content)) {
+            for (const r of block.content) sources.add(r?.url, r?.title);
+          }
+          for (const c of block?.citations ?? []) sources.add(c?.url, c?.title);
+          break;
+        }
         case "content_block_delta":
           if (event.delta?.type === "text_delta" && event.delta.text) {
             text += event.delta.text;
             await handlers.onToken(event.delta.text);
+          }
+          // Citations arrive attached to the sentence they support.
+          if (event.delta?.type === "citations_delta") {
+            const c = event.delta.citation;
+            sources.add(c?.url, c?.title);
           }
           break;
         case "message_delta": {
@@ -100,6 +117,6 @@ export const anthropic: ProviderAdapter = {
           throw new Error(`Anthropic stream error: ${event.error?.message ?? "unknown"}`);
       }
     }
-    return { text, usage: { inputTokens, outputTokens }, finishReason };
+    return { text, usage: { inputTokens, outputTokens }, finishReason, citations: sources.list() };
   },
 };

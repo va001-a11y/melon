@@ -1,4 +1,5 @@
 import type { FinishReason, ProviderAdapter, ProviderChatArgs, ProviderResult } from "../types.js";
+import { CitationCollector } from "./citations.js";
 import { describeNetworkError, readStreamLines, throwHttpError } from "./sse.js";
 import { imageAttachments, inlineTextAttachments } from "./attachments.js";
 
@@ -43,6 +44,7 @@ export const google: ProviderAdapter = {
     let inputTokens = 0;
     let outputTokens = 0;
     let finishReason: FinishReason | undefined;
+    const sources = new CitationCollector();
     for await (const data of readStreamLines(res.body!, "sse")) {
       let event: any;
       try {
@@ -58,6 +60,11 @@ export const google: ProviderAdapter = {
             await handlers.onToken(part.text);
           }
         }
+      }
+      // Grounding metadata names the pages the answer was built from.
+      const chunks = event.candidates?.[0]?.groundingMetadata?.groundingChunks;
+      if (Array.isArray(chunks)) {
+        for (const chunk of chunks) sources.add(chunk?.web?.uri, chunk?.web?.title);
       }
       const reason = event.candidates?.[0]?.finishReason;
       if (reason) {
@@ -75,6 +82,6 @@ export const google: ProviderAdapter = {
         outputTokens = event.usageMetadata.candidatesTokenCount ?? outputTokens;
       }
     }
-    return { text, usage: { inputTokens, outputTokens }, finishReason };
+    return { text, usage: { inputTokens, outputTokens }, finishReason, citations: sources.list() };
   },
 };

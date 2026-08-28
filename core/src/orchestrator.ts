@@ -340,6 +340,9 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
         // Lets the UI explain a reply that stops mid-sentence.
         finishReason: result.finishReason,
         replyLimit: req.settings.maxOutputTokens,
+        // Pages the model consulted, when it searched. Without these the
+        // search is invisible: the answer is better but unverifiable.
+        citations: result.citations,
       });
     } catch (err: unknown) {
       tokenGuard.settleInflight(streamedChars);

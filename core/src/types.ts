@@ -121,10 +121,25 @@ export interface ProviderStreamHandlers {
  */
 export type FinishReason = "stop" | "length" | "filtered" | "unknown";
 
+/**
+ * A source a model consulted while answering.
+ *
+ * Every provider reports these differently — Anthropic in citation blocks,
+ * OpenRouter as url_citation annotations, Google as grounding metadata — so
+ * each adapter normalises to this, and nothing downstream needs to know which
+ * provider produced the answer.
+ */
+export interface Citation {
+  url: string;
+  title?: string;
+}
+
 export interface ProviderResult {
   text: string;
   usage: Usage;
   finishReason?: FinishReason;
+  /** Sources consulted, when the provider searched and reported them. */
+  citations?: Citation[];
 }
 
 export interface ProviderChatArgs {
