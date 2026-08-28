@@ -257,6 +257,7 @@ export async function runConversation(
       role: a.role,
       personality: a.personality || undefined,
       groupPersonality: groupPersonalities[a.role]?.trim() || undefined,
+      webSearch: a.webSearch === true,
       team: a.team ?? 1,
     })),
   };

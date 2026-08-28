@@ -273,6 +273,8 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
         apiKey: agent.apiKey,
         baseUrl: target.baseUrl,
         providerLabel: target.label,
+        providerId: agent.provider,
+        webSearch: agent.webSearch === true,
         system: buildSystemPrompt(agent, req.settings, teamNames),
         messages: buildMessages(
           runningHistory,

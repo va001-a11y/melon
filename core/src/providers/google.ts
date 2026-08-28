@@ -6,7 +6,7 @@ export const google: ProviderAdapter = {
   id: "google",
   label: "Google Gemini",
   async chat(args: ProviderChatArgs): Promise<ProviderResult> {
-    const { model, apiKey, baseUrl, system, messages, maxOutputTokens, signal, handlers } = args;
+    const { model, apiKey, baseUrl, system, messages, maxOutputTokens, signal, handlers, webSearch } = args;
     if (!apiKey) throw new Error("Google Gemini requires an API key — add one in this agent's properties.");
     const base = (baseUrl || "https://generativelanguage.googleapis.com").replace(/\/+$/, "");
     const url =
@@ -29,6 +29,9 @@ export const google: ProviderAdapter = {
             ],
           })),
           generationConfig: { maxOutputTokens },
+          // Grounding with Google Search. The model decides whether a search
+          // would help, runs it, and cites what it used.
+          ...(webSearch ? { tools: [{ google_search: {} }] } : {}),
         }),
       });
     } catch (err) {

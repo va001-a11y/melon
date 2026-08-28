@@ -6,7 +6,7 @@ export const anthropic: ProviderAdapter = {
   id: "anthropic",
   label: "Anthropic",
   async chat(args: ProviderChatArgs): Promise<ProviderResult> {
-    const { model, apiKey, baseUrl, system, messages, maxOutputTokens, signal, handlers } = args;
+    const { model, apiKey, baseUrl, system, messages, maxOutputTokens, signal, handlers, webSearch } = args;
     if (!apiKey) throw new Error("Anthropic requires an API key — add one in this agent's properties.");
     const base = (baseUrl || "https://api.anthropic.com").replace(/\/+$/, "").replace(/\/v1$/, "");
     const url = `${base}/v1/messages`;
@@ -37,6 +37,13 @@ export const anthropic: ProviderAdapter = {
           system,
           max_tokens: maxOutputTokens,
           stream: true,
+          /*
+           * Anthropic runs the search on its own servers and folds the results
+           * into the reply, so there is no tool loop for us to drive. max_uses
+           * caps it: each search is billed on top of tokens, and an agent left
+           * unbounded can run several per answer.
+           */
+          ...(webSearch ? { tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }] } : {}),
           messages: messages.map((m) => {
             const text = inlineTextAttachments(m);
             const images = imageAttachments(m);

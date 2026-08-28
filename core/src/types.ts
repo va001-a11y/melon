@@ -25,6 +25,8 @@ export interface AgentSpec {
   name: string;
   provider: ProviderId;
   model: string;
+  /** Let this agent search the web, where its provider supports it. */
+  webSearch?: boolean;
   apiKey?: string;
   /** Custom base URL for OpenAI-compatible or Ollama endpoints. */
   baseUrl?: string;
@@ -131,6 +133,14 @@ export interface ProviderChatArgs {
   baseUrl?: string;
   /** Human-facing provider name, used in error messages. */
   providerLabel?: string;
+  /**
+   * Catalog id of the provider. The OpenAI adapter speaks for a dozen
+   * services that share a wire format but not their extensions, so it needs
+   * to know which one it is actually talking to.
+   */
+  providerId?: string;
+  /** Ask the provider to search the web before answering. */
+  webSearch?: boolean;
   system: string;
   messages: ChatMessage[];
   maxOutputTokens: number;

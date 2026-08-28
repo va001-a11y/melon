@@ -2616,3 +2616,77 @@ body {
   color: var(--danger);
   border-color: var(--danger);
 }
+
+/* Per-agent web-search toggle in the agent form. */
+.search-row {
+  flex-direction: row !important;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.search-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+
+.search-row span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.search-row small {
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.45;
+  font-weight: 400;
+}
+
+/* Unavailable: dimmed, but still readable so the reason can be read. */
+.search-row-off {
+  opacity: 0.72;
+}
+
+/* ---------- Branch from here ----------
+ * One per block, so it stays out of the way until the row is hovered. On
+ * touch, where there is no hover, it is always visible instead.
+ */
+.branch-btn {
+  display: block;
+  margin-top: 6px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  color: var(--text-dim);
+  border-radius: 7px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.user-msg:hover .branch-btn,
+.run-block:hover .branch-btn,
+.branch-btn:focus-visible {
+  opacity: 1;
+}
+
+.branch-btn:hover:not(:disabled) {
+  border-style: solid;
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.branch-btn:disabled {
+  cursor: default;
+}
+
+@media (hover: none) {
+  .branch-btn {
+    opacity: 1;
+  }
+}

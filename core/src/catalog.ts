@@ -22,6 +22,22 @@ export type Protocol = "openai" | "anthropic" | "google" | "ollama" | "demo";
  */
 export type BrowserSupport = "ok" | "needs-header" | "cors-blocked" | "local-only" | "unverified";
 
+/**
+ * Whether a provider can look things up on the web, and how.
+ *
+ * Melon uses each provider's own search rather than calling a search API
+ * itself. That keeps it bring-your-own-*one*-key, works in the hosted build
+ * where there is no server to proxy through, and avoids a second set of CORS
+ * problems — the provider does the searching on its own machines.
+ *
+ * "native"      — send a flag with the request and the provider searches.
+ * "always"      — grounded in search by design; there is nothing to switch on.
+ * "model-gated" — supported, but only by particular models, so the user has to
+ *                 choose one rather than tick a box.
+ * absent        — no web search. Most open-weight hosts are here.
+ */
+export type WebSearchSupport = "native" | "always" | "model-gated";
+
 export interface ProviderDef {
   id: string;
   label: string;
@@ -51,6 +67,13 @@ export interface ProviderDef {
    * look like it supports fewer models than it does.
    */
   browser?: BrowserSupport;
+  /** Whether this provider can search the web, and how it is switched on. */
+  webSearch?: WebSearchSupport;
+  /**
+   * Models that support search when `webSearch` is "model-gated" — matched as
+   * substrings of the model id, since providers version them.
+   */
+  webSearchModels?: string[];
   /** Conservative context window in tokens. Omitted entries use a safe default. */
   contextWindow?: number;
   /** Whether this provider accepts image attachments. */
@@ -78,6 +101,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://console.anthropic.com/settings/keys",
+    webSearch: "native",
     browser: "needs-header",
     group: "Frontier",
     exampleModels: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
@@ -92,6 +116,8 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://platform.openai.com/api-keys",
+    webSearch: "model-gated",
+    webSearchModels: ["search-preview"],
     browser: "ok",
     group: "Frontier",
     exampleModels: ["gpt-5", "gpt-5-mini", "gpt-4o"],
@@ -106,6 +132,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://aistudio.google.com/apikey",
+    webSearch: "native",
     browser: "ok",
     group: "Frontier",
     exampleModels: ["gemini-2.5-pro", "gemini-2.5-flash"],
@@ -175,6 +202,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://www.perplexity.ai/settings/api",
+    webSearch: "always",
     browser: "ok",
     group: "Search",
     exampleModels: ["sonar-pro", "sonar", "sonar-reasoning-pro"],
@@ -283,6 +311,7 @@ export const PROVIDERS: ProviderDef[] = [
     needsKey: true,
     editableBaseUrl: false,
     keyUrl: "https://openrouter.ai/keys",
+    webSearch: "native",
     browser: "ok",
     group: "Aggregator",
     exampleModels: ["anthropic/claude-sonnet-5", "google/gemini-2.5-pro", "meta-llama/llama-3.3-70b-instruct"],
@@ -405,4 +434,31 @@ export function browserBlockReason(def: ProviderDef): string | null {
 /** Can this provider be used in a build with no server behind it? */
 export function usableInBrowser(def: ProviderDef): boolean {
   return browserBlockReason(def) === null;
+}
+
+/**
+ * Whether an agent on this provider/model can actually search, and if not,
+ * why — phrased for the person configuring it.
+ *
+ * Returns `null` when search is available and switchable. "always" providers
+ * also return null but need no toggle; callers use `webSearchIsAutomatic`.
+ */
+export function webSearchBlockReason(def: ProviderDef | undefined, model: string): string | null {
+  if (!def) return "pick a provider first";
+  switch (def.webSearch) {
+    case "native":
+    case "always":
+      return null;
+    case "model-gated": {
+      const ok = (def.webSearchModels ?? []).some((m) => model.toLowerCase().includes(m));
+      return ok ? null : `only ${def.label}'s search models can (try one ending "-search-preview")`;
+    }
+    default:
+      return `${def.label} has no web search`;
+  }
+}
+
+/** True when the provider always searches and there is nothing to switch on. */
+export function webSearchIsAutomatic(def: ProviderDef | undefined): boolean {
+  return def?.webSearch === "always";
 }

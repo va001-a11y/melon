@@ -30,6 +30,34 @@ interface Props {
   paceLimit: number;
   formatReplies: boolean;
   onRerun: (blockId: string, agentId: string, mode: "retry" | "regenerate" | "continue") => void;
+  /** Copy this chat up to and including a block into a new chat. */
+  onBranch: (blockId: string) => void;
+}
+
+
+/**
+ * Fork the conversation at this point.
+ *
+ * Deliberately quiet — it only surfaces on hover, because it appears on every
+ * block and would otherwise be visual noise on a long chat. The original is
+ * never modified: branching copies history into a new chat and leaves this one
+ * exactly as it was, so it is always safe to press.
+ */
+function BranchButton({ onBranch, busy }: { onBranch: () => void; busy: boolean }) {
+  return (
+    <button
+      className="branch-btn"
+      onClick={onBranch}
+      disabled={busy}
+      title={
+        busy
+          ? "Wait for the current run to finish"
+          : "Branch from here — copies the conversation up to this point into a new chat, leaving this one untouched"
+      }
+    >
+      ⑂ Branch from here
+    </button>
+  );
 }
 
 function AgentCard({
@@ -270,6 +298,7 @@ export function ChatView({
   paceLimit,
   formatReplies,
   onRerun,
+  onBranch,
 }: Props) {
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -409,6 +438,7 @@ export function ChatView({
                   ))}
                 </div>
               )}
+              <BranchButton onBranch={() => onBranch(m.id)} busy={running} />
             </div>
           ) : (
             // Teams are read off the stored replies, so a reopened chat is
@@ -455,6 +485,7 @@ export function ChatView({
                   );
                 })}
               </div>
+              <BranchButton onBranch={() => onBranch(m.id)} busy={running} />
             </div>
           )
         )}

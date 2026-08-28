@@ -11,7 +11,7 @@ export const openai: ProviderAdapter = {
   id: "openai",
   label: "OpenAI-compatible",
   async chat(args: ProviderChatArgs): Promise<ProviderResult> {
-    const { model, apiKey, baseUrl, providerLabel, system, messages, maxOutputTokens, signal, handlers } = args;
+    const { model, apiKey, baseUrl, providerLabel, providerId, system, messages, maxOutputTokens, signal, handlers, webSearch } = args;
     const base = (baseUrl ?? "https://api.openai.com/v1").replace(/\/+$/, "");
     const requestUrl = `${base}/chat/completions`;
     let url = requestUrl;

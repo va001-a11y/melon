@@ -114,6 +114,10 @@ function normaliseAgent(raw: Record<string, unknown>): Agent | null {
     personality: str(raw.personality),
     active: raw.active === true,
     color: str(raw.color, AGENT_COLORS[0]),
+    // Normalising rebuilds each agent field by field, so anything not listed
+    // here is silently dropped on reload — this has to stay in step with the
+    // Agent type.
+    webSearch: raw.webSearch === true,
     team: typeof raw.team === "number" && raw.team > 0 ? raw.team : 1,
   };
 }
@@ -648,6 +652,49 @@ export default function App() {
     setBanner(null);
   }, []);
 
+  /**
+   * Fork the conversation at a block: copy everything up to and including it
+   * into a new chat, then switch to it.
+   *
+   * The point is to try a different direction — another model, another
+   * question — without losing the thread you already have. So the original is
+   * never touched: this writes a new chat and leaves the old one exactly as it
+   * was, which is what makes the button safe to press out of curiosity.
+   *
+   * Branches are titled from the original with an arrow, so the sidebar shows
+   * where a chat came from without needing a tree view.
+   */
+  const branchFrom = useCallback(
+    (blockId: string) => {
+      if (runningRef.current) return;
+
+      const cut = messages.findIndex((m) => m.id === blockId);
+      if (cut < 0) return;
+      const carried = messages.slice(0, cut + 1);
+
+      const parentTitle = chatsIndex.find((c) => c.id === chatId)?.title ?? chatTitle(messages);
+      // Branching a branch shouldn't stack arrows forever.
+      const base = parentTitle.split(" ↳ ")[0];
+
+      const newId = makeId();
+      try {
+        localStorage.setItem(`melon.chat.${newId}`, JSON.stringify(carried));
+      } catch {
+        setBanner("Couldn't save the branch — browser storage is full or unavailable.");
+        return;
+      }
+
+      setChatsIndex((prev) => [
+        { id: newId, title: `${base} ↳ branch`, customTitle: true, updatedAt: Date.now() },
+        ...prev,
+      ]);
+      setChatId(newId);
+      setMessages(carried);
+      setBanner(null);
+    },
+    [messages, chatsIndex, chatId]
+  );
+
   const loadChat = useCallback((id: string) => {
     if (runningRef.current) return;
     setChatId(id);
@@ -842,6 +889,7 @@ export default function App() {
           paceLimit={settings.tokensPerMinute}
           formatReplies={settings.formatReplies}
           onRerun={(blockId, agentId, mode) => void rerunAgent(blockId, agentId, mode)}
+          onBranch={branchFrom}
         />
       </div>
 

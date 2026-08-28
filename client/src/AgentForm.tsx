@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Agent, ProviderDef } from "./types";
-import { browserBlockReason } from "@melon/core";
+import { browserBlockReason, webSearchBlockReason, webSearchIsAutomatic } from "@melon/core";
 import { RUNS_LOCALLY } from "./target";
 import { DESKTOP_URL } from "./config";
 import { ROLES } from "./defaults";
@@ -15,6 +15,7 @@ export interface AgentDraft {
   baseUrl: string;
   role: string;
   personality: string;
+  webSearch: boolean;
 }
 
 export const EMPTY_DRAFT: AgentDraft = {
@@ -25,6 +26,7 @@ export const EMPTY_DRAFT: AgentDraft = {
   baseUrl: "",
   role: "generalist",
   personality: "",
+  webSearch: false,
 };
 
 export function draftFromAgent(a: Agent): AgentDraft {
@@ -36,6 +38,7 @@ export function draftFromAgent(a: Agent): AgentDraft {
     baseUrl: a.baseUrl,
     role: a.role,
     personality: a.personality,
+    webSearch: a.webSearch === true,
   };
 }
 
@@ -71,6 +74,10 @@ export function AgentForm({ draft, setDraft, providers, editingName, onSave, onR
   // Live lists beat local scans, which beat the static examples.
   const modelOptions =
     fetched.models.length > 0 ? fetched.models : detected.length > 0 ? detected : def?.exampleModels ?? [];
+
+  /** Why this provider/model cannot search, or null when it can. */
+  const searchBlocked = webSearchBlockReason(def, draft.model);
+  const searchAutomatic = webSearchIsAutomatic(def);
 
   /** Whether the note under the picker is needed at all. */
   const anyBlocked = useMemo(
@@ -326,6 +333,33 @@ export function AgentForm({ draft, setDraft, providers, editingName, onSave, onR
             </option>
           ))}
         </select>
+      </label>
+
+      {/*
+        Per-agent rather than a global switch, because that is how a pipeline
+        actually wants it: a Sources stage should look things up while the
+        stage that drafts from its findings should not go off searching again.
+
+        Providers that cannot search still show the row, disabled and saying
+        why — the same reasoning as the greyed-out provider entries.
+      */}
+      <label className={`search-row ${searchBlocked ? "search-row-off" : ""}`}>
+        <input
+          type="checkbox"
+          checked={searchAutomatic || (draft.webSearch && !searchBlocked)}
+          disabled={!!searchBlocked || searchAutomatic}
+          onChange={(e) => patch({ webSearch: e.target.checked })}
+        />
+        <span>
+          Search the web
+          <small>
+            {searchAutomatic
+              ? `${def?.label ?? "This provider"} always searches — nothing to switch on.`
+              : searchBlocked
+                ? `Not available: ${searchBlocked}.`
+                : "The provider looks things up itself before answering. Costs extra per search."}
+          </small>
+        </span>
       </label>
 
       <label>

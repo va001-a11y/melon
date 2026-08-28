@@ -16,8 +16,15 @@ export { runConversation } from "./orchestrator.js";
 
 export * from "./types.js";
 
-export { PROVIDERS, contextWindowFor, browserBlockReason, usableInBrowser } from "./catalog.js";
-export type { ProviderDef, BrowserSupport } from "./catalog.js";
+export {
+  PROVIDERS,
+  contextWindowFor,
+  browserBlockReason,
+  usableInBrowser,
+  webSearchBlockReason,
+  webSearchIsAutomatic,
+} from "./catalog.js";
+export type { ProviderDef, BrowserSupport, WebSearchSupport } from "./catalog.js";
 
 export {
   COMPAT_PROVIDERS,

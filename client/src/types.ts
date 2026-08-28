@@ -25,6 +25,8 @@ export interface Agent {
   personality: string;
   active: boolean;
   color: string;
+  /** Let this agent search the web, where its provider supports it. */
+  webSearch?: boolean;
   /** 1-based pipeline stage. Everything defaults to team 1. */
   team?: number;
 }
