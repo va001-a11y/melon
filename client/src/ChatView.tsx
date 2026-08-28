@@ -60,15 +60,49 @@ function AgentCard({
   const { cot, answer, reasoningInProgress } = splitCot(response.text);
   const roleLabel = ROLES.find((r) => r.key === response.role)?.label ?? response.role;
   const [flagged, setFlagged] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"no" | "yes" | "failed">("no");
 
+  /**
+   * Copy the reply, with a fallback and — importantly — a visible failure.
+   *
+   * `navigator.clipboard` is unavailable in more situations than it looks:
+   * a non-secure origin, a browser withholding the permission, or a click the
+   * browser does not consider a user gesture. This used to swallow all of
+   * those silently, so the button simply did nothing and gave no clue why.
+   * The old textarea trick still works in those cases, and if even that
+   * fails the button says so rather than pretending.
+   */
   const copy = async () => {
+    const text = answer || cot;
+    const flash = (state: "yes" | "failed") => {
+      setCopied(state);
+      window.setTimeout(() => setCopied("no"), state === "yes" ? 1500 : 2500);
+    };
+
     try {
-      await navigator.clipboard.writeText(answer || cot);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
+      await navigator.clipboard.writeText(text);
+      flash("yes");
+      return;
     } catch {
-      /* clipboard blocked — the text is selectable either way */
+      /* fall through to the legacy path */
+    }
+
+    try {
+      const scratch = document.createElement("textarea");
+      scratch.value = text;
+      // Kept out of view and out of the tab order, but still selectable —
+      // display:none or visibility:hidden would break the copy.
+      scratch.setAttribute("readonly", "");
+      scratch.style.position = "fixed";
+      scratch.style.top = "-1000px";
+      scratch.style.opacity = "0";
+      document.body.appendChild(scratch);
+      scratch.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(scratch);
+      flash(ok ? "yes" : "failed");
+    } catch {
+      flash("failed");
     }
   };
   return (
@@ -102,6 +136,28 @@ function AgentCard({
             </span>
           )}
         </span>
+        {/*
+          In the header rather than down with the other actions, because those
+          only appear once a reply has finished — during a long stream there
+          was nothing to click, and the button read as missing entirely. Here
+          it shows the moment there is anything worth copying.
+        */}
+        {(answer || cot) && (
+          <button
+            className={`card-copy ${copied === "yes" ? "copied" : ""} ${copied === "failed" ? "copy-failed" : ""}`}
+            onClick={copy}
+            aria-label="Copy this reply"
+            title={
+              copied === "failed"
+                ? "Your browser blocked the clipboard — select the text and copy it manually"
+                : response.status === "streaming"
+                  ? "Copy what has been written so far"
+                  : "Copy this reply"
+            }
+          >
+            {copied === "yes" ? "✓" : copied === "failed" ? "✕" : "⧉"}
+          </button>
+        )}
         {response.status === "done" && (
           <button
             className={`flag-btn ${flagged ? "flagged" : ""}`}
@@ -152,11 +208,8 @@ function AgentCard({
           agent, rather than a whole round of everyone. */}
       {(response.status === "done" || response.status === "error" || response.status === "stopped") && (
         <div className="card-actions">
-          {(answer || cot) && (
-            <button className="card-action" onClick={copy} title="Copy this reply">
-              {copied ? "✓ Copied" : "Copy"}
-            </button>
-          )}
+          {/* Copy lives in the card header now — it is useful mid-stream too,
+              and this row only exists once a reply has finished. */}
           {response.status === "error" && (
             <button className="card-action" onClick={() => onRerun(response.agentId, "retry")} disabled={busy}>
               ↻ Retry

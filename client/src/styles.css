@@ -2563,3 +2563,56 @@ body {
 .provider-note-blocked a {
   color: var(--accent);
 }
+
+/* ---------- Copy, in the card header ----------
+ * Sits beside the flag button, to the right of the status. Matches .flag-btn
+ * so the two read as one pair of controls rather than competing.
+ *
+ * Unlike the actions row below, this is present while a reply is still
+ * streaming — copying half an answer is a reasonable thing to want, and a
+ * control that only appears after a long wait reads as no control at all.
+ */
+.card-copy {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-size: 12px;
+  line-height: 1.35;
+  cursor: pointer;
+  margin-left: 6px;
+}
+
+.card-copy:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.card-copy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Confirmation reads as success, and holds for a moment before reverting. */
+.card-copy.copied {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+/* The status text can push the buttons off a narrow card; let it give way. */
+@media (max-width: 560px) {
+  .card-status {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* Clipboard genuinely blocked — say so rather than looking inert. */
+.card-copy.copy-failed {
+  color: var(--danger);
+  border-color: var(--danger);
+}
