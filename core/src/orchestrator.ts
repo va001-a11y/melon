@@ -11,7 +11,7 @@ import { buildMessages, buildSystemPrompt, COT_END, hasConcluded, stripConclusio
 import type { PriorTurn } from "./prompts.js";
 import { stopController } from "./stop.js";
 import { HARD_AGENT_CAP } from "./registry.js";
-import { contextWindowFor } from "./catalog.js";
+import { PROVIDERS, contextWindowFor, supportsVision } from "./catalog.js";
 import { computeDynamicLimit, estimateTokens, tokenGuard } from "./guard.js";
 import { analytics } from "./analytics.js";
 
@@ -268,6 +268,30 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
     let streamedChars = 0;
     try {
       const target = resolveTarget(agent);
+
+      /*
+       * Refuse an image the model cannot see, rather than sending it anyway.
+       *
+       * Every adapter used to build image parts unconditionally, so attaching
+       * a picture and running a text-only model produced the provider's own
+       * error — Groq answers "messages[10].content must be a string", which
+       * tells the user nothing about what to do. Worse, a provider that
+       * quietly ignored the image would leave the model describing a picture
+       * it never received, which is how confident fabrication starts.
+       *
+       * Only this agent fails; the others in the run still answer, so a mixed
+       * line-up degrades rather than collapsing.
+       */
+      const images = (req.attachments ?? []).filter((a) => a.kind === "image");
+      if (images.length > 0 && !supportsVision(agent.provider)) {
+        const able = PROVIDERS.filter((p) => p.vision).map((p) => p.label);
+        throw new Error(
+          `${target.label} can't see images, so "${images[0].name}"` +
+            `${images.length > 1 ? ` and ${images.length - 1} more` : ""} could not be sent. ` +
+            `Remove the attachment, or switch this agent to one that can: ${able.join(", ")}.`
+        );
+      }
+
       const result = await target.adapter.chat({
         model: agent.model,
         apiKey: agent.apiKey,
