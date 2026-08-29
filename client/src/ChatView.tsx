@@ -250,7 +250,7 @@ function AgentCard({
       )}
 
       {response.citations && response.citations.length > 0 && (
-        <details className="sources">
+        <details className="sources" open={response.citations.length <= 8}>
           <summary>
             🔗 {response.citations.length} source{response.citations.length === 1 ? "" : "s"}
           </summary>
