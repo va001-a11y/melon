@@ -45,6 +45,26 @@ export const openai: ProviderAdapter = {
       messages: [{ role: "system", content: system }, ...wireMessages],
     };
 
+    /*
+     * Web search, for the providers offering it over this wire format. There
+     * is no shared standard — each spells it its own way — so this branches on
+     * the catalog id rather than pretending one shape fits all.
+     *
+     * OpenAI is deliberately absent: over /chat/completions it only searches
+     * on its dedicated `-search-preview` models, which take no flag. There the
+     * model id is the switch, which the catalog marks as "model-gated".
+     */
+    if (webSearch && providerId === "openrouter") {
+      body.plugins = [{ id: "web" }];
+    }
+
+    // TEMPORARY DIAGNOSTIC — remove once the citation shape is confirmed.
+    if (webSearch) {
+      console.log(
+        `[melon:search] request provider=${providerId} model=${model} plugins=${JSON.stringify(body.plugins ?? null)}`
+      );
+    }
+
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (apiKey) headers.authorization = `Bearer ${apiKey}`;
 
