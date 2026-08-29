@@ -20,7 +20,6 @@ export {
   PROVIDERS,
   contextWindowFor,
   browserBlockReason,
-  usableInBrowser,
   webSearchBlockReason,
   webSearchIsAutomatic,
 } from "./catalog.js";

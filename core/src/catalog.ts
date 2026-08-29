@@ -80,8 +80,18 @@ export interface ProviderDef {
   vision?: boolean;
 }
 
-/** Conservative fallback when a provider doesn't declare a window. */
-const DEFAULT_CONTEXT_WINDOW = 32000;
+/*
+ * Fallback when a provider doesn't declare a window.
+ *
+ * Ten providers have no contextWindow of their own, and 32,000 wrongly
+ * blocked conversations that their models handle comfortably — most current
+ * chat models are 128k or larger. The two failure directions are not
+ * symmetric: guessing low blocks a legitimate request with no way for the
+ * user to proceed, while guessing high lets the provider reject it, and that
+ * path already reports the real size and what to do about it. So this errs
+ * high deliberately.
+ */
+const DEFAULT_CONTEXT_WINDOW = 128000;
 
 export function contextWindowFor(providerId: string): number {
   return getProvider(providerId)?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
@@ -429,11 +439,6 @@ export function browserBlockReason(def: ProviderDef): string | null {
     default:
       return null;
   }
-}
-
-/** Can this provider be used in a build with no server behind it? */
-export function usableInBrowser(def: ProviderDef): boolean {
-  return browserBlockReason(def) === null;
 }
 
 /**

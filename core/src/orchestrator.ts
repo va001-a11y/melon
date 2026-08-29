@@ -282,6 +282,19 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
        * Only this agent fails; the others in the run still answer, so a mixed
        * line-up degrades rather than collapsing.
        */
+      /*
+       * A missing key is knowable before the request. Two of the four adapters
+       * guarded for it and two did not, so on an OpenAI-family provider Melon
+       * sent an unauthenticated request and relayed the provider's 401 —
+       * which says "missing, wrong, or not authorised" when Melon knows
+       * perfectly well which of those it is.
+       */
+      if (target.needsKey && !agent.apiKey?.trim()) {
+        throw new Error(
+          `${target.label} needs an API key. Right-click this agent → Edit properties and paste one.`
+        );
+      }
+
       const images = (req.attachments ?? []).filter((a) => a.kind === "image");
       if (images.length > 0 && !supportsVision(agent.provider)) {
         const able = PROVIDERS.filter((p) => p.vision).map((p) => p.label);
