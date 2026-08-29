@@ -58,13 +58,6 @@ export const openai: ProviderAdapter = {
       body.plugins = [{ id: "web" }];
     }
 
-    // TEMPORARY DIAGNOSTIC — remove once the citation shape is confirmed.
-    if (webSearch) {
-      console.log(
-        `[melon:search] request provider=${providerId} model=${model} plugins=${JSON.stringify(body.plugins ?? null)}`
-      );
-    }
-
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (apiKey) headers.authorization = `Bearer ${apiKey}`;
 
@@ -110,13 +103,7 @@ export const openai: ProviderAdapter = {
     let outputTokens = 0;
     let finishReason: FinishReason | undefined;
     const sources = new CitationCollector();
-    let diagnosticsLogged = 0;
     for await (const data of readStreamLines(res.body!, "sse")) {
-      // TEMPORARY DIAGNOSTIC — see the note above.
-      if (webSearch && diagnosticsLogged < 3 && /annotation|citation|url_citation/i.test(data)) {
-        diagnosticsLogged++;
-        console.log(`[melon:search] chunk with citation data: ${data.slice(0, 900)}`);
-      }
       if (data === "[DONE]") break;
       let event: any;
       try {
@@ -169,10 +156,6 @@ export const openai: ProviderAdapter = {
         inputTokens = event.usage.prompt_tokens ?? inputTokens;
         outputTokens = event.usage.completion_tokens ?? outputTokens;
       }
-    }
-    if (webSearch) {
-      const found = sources.list();
-      console.log(`[melon:search] finished: ${found ? found.length : 0} citations parsed; ${diagnosticsLogged} citation-bearing chunks seen`);
     }
     return { text, usage: { inputTokens, outputTokens }, finishReason, citations: sources.list() };
   },
