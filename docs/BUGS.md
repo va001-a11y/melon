@@ -225,6 +225,16 @@ collapsing.
   no way for the user to proceed, while guessing high lets the provider reject
   it, and that path already reports the real size and what to do about it.
 
+`5b84720` — Models prefixed their replies with their own name:
+`[Generalist (openai/gpt-4o)]: …`. The cause was Melon's own transcript
+format, not the model ignoring instructions — `buildMessages` labels earlier
+turns as `[Agent name]: …` so agents can tell each other apart, and models copy
+that format onto their own output. The existing rule forbade making yourself
+the *subject* of a reply; this was a *format* being imitated, so it did not
+apply. Fixed by saying in the prompt where the labels come from, and by
+stripping one anyway — in the orchestrator before the answer enters history
+(otherwise the next turn re-labels it as `[Name]: [Name]: …`) and on display.
+
 ### Discoverability
 
 `037a38f`, `0aeb1b4` — Chat search was hidden until four chats, then until two,
