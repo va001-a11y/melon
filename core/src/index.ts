@@ -46,5 +46,6 @@ export {
   COT_END,
   hasConcluded,
   stripConclusion,
+  stripSpeakerLabel,
 } from "./prompts.js";
 export type { PriorTurn } from "./prompts.js";

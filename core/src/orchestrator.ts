@@ -7,7 +7,14 @@
  */
 import type { AgentSpec, Attachment, HistoryTurn, RunRequest, Usage } from "./types.js";
 import { resolveTarget } from "./providers/index.js";
-import { buildMessages, buildSystemPrompt, COT_END, hasConcluded, stripConclusion } from "./prompts.js";
+import {
+  buildMessages,
+  buildSystemPrompt,
+  COT_END,
+  hasConcluded,
+  stripConclusion,
+  stripSpeakerLabel,
+} from "./prompts.js";
 import type { PriorTurn } from "./prompts.js";
 import { stopController } from "./stop.js";
 import { HARD_AGENT_CAP } from "./registry.js";
@@ -367,7 +374,9 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
       if (hasConcluded(raw)) agreed.add(agent.id);
       else agreed.delete(agent.id);
 
-      const answer = stripConclusion(raw).trim();
+      // Also drop a speaker label the model wrote itself; left in, it would
+      // be re-labelled by buildMessages next turn as "[Name]: [Name]: …".
+      const answer = stripSpeakerLabel(stripConclusion(raw)).trim();
       if (answer) priorThisRound.push({ agentName: agent.name, content: answer });
       sink.send("agent-done", {
         agentId: agent.id,

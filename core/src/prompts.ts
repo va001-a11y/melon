@@ -122,6 +122,17 @@ export function buildSystemPrompt(agent: AgentSpec, settings: RunSettings, teamN
       "Never make yourself, your name, your role, the other agents, or this platform the subject of your reply — " +
       "the user asked about their topic, not about you. Do not describe what you are about to do; just answer."
   );
+  /*
+   * Earlier turns are shown as "[Agent name]: …" so an agent can tell its
+   * teammates apart. Models copy that format and prefix their own replies
+   * with it, which the user then sees. Saying where the labels come from is
+   * what stops the imitation; stripSpeakerLabel() catches the rest.
+   */
+  parts.push(
+    "Earlier turns above are prefixed with the speaker's name in square brackets. Melon adds those labels so you " +
+      "can tell who said what — they are not part of anyone's reply. Never write such a label yourself. Start " +
+      "straight into your answer, with no name, prefix or preamble."
+  );
   parts.push("Keep your answer focused on your role. Other agents cover other angles — do not duplicate their work.");
 
   if (!settings.parallel && teamNames.length > 1) {
@@ -214,6 +225,29 @@ export interface PriorTurn {
  * conversation stays coherent, but their reasoning sections are omitted
  * to limit token duplication.
  */
+
+/**
+ * Remove a speaker label the model wrote at the start of its own reply.
+ *
+ * History shows prior turns as "[Agent name]: …", and models imitate it. The
+ * system prompt now says not to, but instructions are guidance, so this
+ * strips the label regardless.
+ *
+ * Also hides a partially-written one mid-stream, so "[Gen" never flickers
+ * into view before the closing bracket arrives — the same reason
+ * stripConclusion handles partial markers.
+ */
+export function stripSpeakerLabel(text: string): string {
+  // A completed label: "[" up to 60 chars with no newline, "]" then a colon.
+  const complete = text.replace(/^\s*\[[^\]\n]{1,60}\]:[ \t]*/, "");
+  if (complete !== text) return complete;
+
+  // Still being written: an unclosed bracket at the very start, short enough
+  // to plausibly be a label rather than prose that happens to open with "[".
+  if (/^\s*\[[^\]\n]{0,60}$/.test(text)) return "";
+  return text;
+}
+
 export function buildMessages(
   history: HistoryTurn[],
   userMessage: string,
