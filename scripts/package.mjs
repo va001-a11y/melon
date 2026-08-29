@@ -8,7 +8,7 @@
  * machine ranges from wasteful to broken. The receiving machine rebuilds it
  * with `npm install`, which the launcher does automatically on first run.
  */
-import { cpSync, mkdtempSync, rmSync, existsSync, statSync } from "node:fs";
+import { cpSync, mkdtempSync, rmSync, existsSync, statSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { dirname, join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,11 +19,22 @@ const IS_WINDOWS = platform() === "win32";
 
 /** Everything needed to run Melon from a clean checkout. */
 const INCLUDE = [
+  /*
+   * Every workspace in package.json must appear here. When the core was
+   * extracted, this list was not updated, so the zip declared a "core"
+   * workspace it did not contain and npm install failed on it. The guard
+   * below now checks that automatically rather than relying on memory.
+   */
+  "core/src",
+  "core/package.json",
+  "core/tsconfig.json",
   "client/src",
   "client/index.html",
   "client/package.json",
   "client/tsconfig.json",
   "client/vite.config.ts",
+  // Selects the browser target for `npm run web`; a build switch, not a secret.
+  "client/.env.web",
   "server/src",
   "server/package.json",
   "server/tsconfig.json",
@@ -47,6 +58,26 @@ function human(bytes) {
 const stamp = new Date().toISOString().slice(0, 10);
 const outName = `Melon-${stamp}.zip`;
 const outPath = join(dirname(PLATFORM_DIR), outName);
+
+/*
+ * Refuse to ship an archive that omits a workspace package.json declares.
+ * The core was extracted into its own workspace and this list was not
+ * updated, so every zip built afterwards declared a "core" workspace it did
+ * not contain — npm install failed on it, and nothing noticed because the
+ * packager reported success either way.
+ */
+const declaredWorkspaces = JSON.parse(readFileSync(join(PLATFORM_DIR, "package.json"), "utf8")).workspaces ?? [];
+const missing = declaredWorkspaces.filter((w) => !INCLUDE.some((entry) => entry === w || entry.startsWith(`${w}/`)));
+if (missing.length > 0) {
+  console.error(
+    `
+  Refusing to package: package.json declares workspace(s) ${missing.join(", ")} ` +
+      `which the INCLUDE list does not cover.
+  Add them to scripts/package.mjs, or the zip will fail on npm install.
+`
+  );
+  process.exit(1);
+}
 
 const staging = mkdtempSync(join(tmpdir(), "melon-pkg-"));
 const root = join(staging, "platform");

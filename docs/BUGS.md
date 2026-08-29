@@ -235,6 +235,20 @@ apply. Fixed by saying in the prompt where the labels come from, and by
 stripping one anyway — in the orchestrator before the answer enters history
 (otherwise the next turn re-labels it as `[Name]: [Name]: …`) and on display.
 
+### Packaging
+
+`npm run package` shipped a broken archive for four days. Extracting the core
+into its own workspace added `core` to `package.json`, but the packager's
+INCLUDE list was never updated — so every zip built afterwards declared a
+workspace it did not contain, and `npm install` would fail on it. Nothing
+noticed because the packager reported success either way, and the GitHub
+release uses GitHub's own source archive rather than this one.
+
+Fixed by adding `core/` (and `client/.env.web`), and by making the packager
+refuse to build when `package.json` declares a workspace the list does not
+cover — verified by removing the entries and watching it exit with
+"Refusing to package".
+
 ### Themes
 
 "Match my system" was removed rather than fixed again. It resolved correctly
