@@ -1,6 +1,14 @@
 * {
   box-sizing: border-box;
   margin: 0;
+  /*
+   * Applied to every element, not just :root — scrollbar-width does not
+   * inherit, so setting it on the root styles the page's own bar and leaves
+   * the composer, the chat pane and every scrolling panel with the default
+   * wide one carrying stepper arrows.
+   */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
 
 /*
@@ -9,6 +17,26 @@
  * stay easy on the eyes.
  */
 :root {
+  /*
+   * Tells the browser which scheme the page is, so it paints native UI —
+   * scrollbars, select menus, number spinners — to match. Without it a dark
+   * palette gets a white scrollbar, because prefers-color-scheme only READS
+   * the OS setting; this property is what DECLARES the page's own.
+   */
+  color-scheme: light;
+
+  /*
+   * Slim, theme-tinted scrollbars everywhere. The default Windows bar is wide
+   * and carries stepper arrows, which on the composer looked like a stray
+   * control rather than a scrollbar.
+   *
+   * Thinned rather than hidden on purpose: the composer grows to a cap and
+   * then scrolls, so with no bar at all a long draft would look truncated
+   * with nothing to say otherwise, and there would be nothing to drag.
+   */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+
   --bg: #f6f3ee;
   --bg-panel: #efeae2;
   --bg-card: #fdfbf8;
@@ -28,6 +56,7 @@
 /* Dusk — the dark counterpart to Paper, used when the system prefers dark. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
+    color-scheme: dark;
     --bg: #22201d;
     --bg-panel: #2a2724;
     --bg-card: #322e2a;
@@ -44,6 +73,7 @@
 
 /* ---- Explicit themes (chosen in Settings → Select theme) ---- */
 :root[data-theme="paper"] {
+  color-scheme: light;
   --bg: #f6f3ee;
   --bg-panel: #efeae2;
   --bg-card: #fdfbf8;
@@ -58,6 +88,7 @@
 }
 
 :root[data-theme="dusk"] {
+  color-scheme: dark;
   --bg: #22201d;
   --bg-panel: #2a2724;
   --bg-card: #322e2a;
@@ -72,6 +103,7 @@
 }
 
 :root[data-theme="mist"] {
+  color-scheme: light;
   --bg: #f2f4f7;
   --bg-panel: #e8ebf0;
   --bg-card: #fbfcfd;
@@ -86,6 +118,7 @@
 }
 
 :root[data-theme="ink"] {
+  color-scheme: dark;
   --bg: #1b1d21;
   --bg-panel: #222528;
   --bg-card: #292c31;
@@ -100,6 +133,7 @@
 }
 
 :root[data-theme="sepia"] {
+  color-scheme: light;
   --bg: #f4ecdd;
   --bg-panel: #ece2cf;
   --bg-card: #fbf6ec;
@@ -114,6 +148,7 @@
 }
 
 :root[data-theme="contrast"] {
+  color-scheme: dark;
   --bg: #000000;
   --bg-panel: #0b0b0b;
   --bg-card: #151515;
