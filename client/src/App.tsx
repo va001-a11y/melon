@@ -13,7 +13,7 @@ import type {
 } from "./types";
 import { COST_CONFIRM_THRESHOLD, DEFAULT_SETTINGS, AGENT_COLORS, MODES, makeId } from "./defaults";
 import { flagResponse, getGuard, getRegistry, resetGuard, runConversation, stopTokenFlow } from "./api";
-import { DEFAULT_THEME_CHOICE, applyTheme, migrateThemeChoice, watchSystemScheme } from "./themes";
+import { DEFAULT_THEME_CHOICE, applyTheme, migrateThemeChoice } from "./themes";
 import type { ThemeChoice } from "./themes";
 import { Settings as SettingsModal } from "./Settings";
 import { Analytics } from "./Analytics";
@@ -281,8 +281,6 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("melon.theme", JSON.stringify(theme));
     applyTheme(theme);
-    // Re-apply when the device flips, so the pairing switches live.
-    return watchSystemScheme(() => applyTheme(theme));
   }, [theme]);
   useEffect(() => localStorage.setItem("melon.chats.index", JSON.stringify(chatsIndex)), [chatsIndex]);
   useEffect(() => localStorage.setItem("melon.currentChat", JSON.stringify(chatId)), [chatId]);

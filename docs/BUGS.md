@@ -235,6 +235,22 @@ apply. Fixed by saying in the prompt where the labels come from, and by
 stripping one anyway — in the orchestrator before the answer enters history
 (otherwise the next turn re-labels it as `[Name]: [Name]: …`) and on display.
 
+### Themes
+
+"Match my system" was removed rather than fixed again. It resolved correctly
+on load — verified light gives Paper and dark gives Dusk — but users on two
+separate machines reported it disagreeing with their device, and the cause is
+outside Melon: Windows has two theme settings, and browsers follow "Choose
+your default app mode" rather than the Windows mode most people change. A
+feature that needs a paragraph of operating-system trivia to explain is worth
+less than the confusion it causes. A stored "system" choice is resolved once
+against the device and written back as that concrete palette, so nobody is
+snapped to a default.
+
+**Testing note:** the browser pane's `colorScheme` emulation changes the value
+without dispatching a `change` event — a freshly registered listener does not
+fire either — so live scheme switching cannot be tested that way.
+
 ### Discoverability
 
 `037a38f`, `0aeb1b4` — Chat search was hidden until four chats, then until two,

@@ -32,7 +32,7 @@ export interface ThemeChoice {
 }
 
 export const DEFAULT_THEME_CHOICE: ThemeChoice = {
-  selection: SYSTEM,
+  selection: "paper",
   autoLight: "paper",
   autoDark: "dusk",
 };
@@ -45,10 +45,13 @@ export function systemPrefersDark(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
-/** Which palette is actually in force right now. */
+/**
+ * Which palette is in force. Anything unrecognised — including the retired
+ * "system" selection — falls back to a real palette, so `data-theme` can never
+ * name a block that does not exist in the stylesheet.
+ */
 export function resolveTheme(choice: ThemeChoice): string {
-  if (choice.selection !== SYSTEM) return choice.selection;
-  return systemPrefersDark() ? choice.autoDark : choice.autoLight;
+  return THEMES.some((t) => t.id === choice.selection) ? choice.selection : DEFAULT_THEME_CHOICE.selection;
 }
 
 /** Apply it. data-theme is always set, so there is no implicit fallback. */
@@ -64,18 +67,36 @@ export function watchSystemScheme(onChange: () => void): () => void {
   return () => mq.removeEventListener("change", onChange);
 }
 
-/** Older builds stored a bare theme id; keep those working. */
+/**
+ * Bring a stored choice up to date.
+ *
+ * Two migrations. Older builds stored a bare theme id rather than an object.
+ * And "Match my system" has been retired — it depended on the browser
+ * reporting the OS preference correctly, which on Windows means a different
+ * setting from the one most people change, so it silently disagreed with the
+ * device and could not be explained without a paragraph of trivia.
+ *
+ * A stored "system" is resolved ONCE against what the device says right now
+ * and written back as that concrete palette, so the user keeps the appearance
+ * they already had instead of being snapped to a default.
+ */
 export function migrateThemeChoice(stored: unknown): ThemeChoice {
+  const asChoice = (c: Partial<ThemeChoice>): ThemeChoice => ({
+    selection: c.selection ?? DEFAULT_THEME_CHOICE.selection,
+    autoLight: c.autoLight ?? DEFAULT_THEME_CHOICE.autoLight,
+    autoDark: c.autoDark ?? DEFAULT_THEME_CHOICE.autoDark,
+  });
+
+  const settled = (c: ThemeChoice): ThemeChoice =>
+    c.selection === SYSTEM
+      ? { ...c, selection: systemPrefersDark() ? c.autoDark : c.autoLight }
+      : c;
+
   if (typeof stored === "string") {
-    return stored === SYSTEM ? DEFAULT_THEME_CHOICE : { ...DEFAULT_THEME_CHOICE, selection: stored };
+    return settled(asChoice(stored === SYSTEM ? {} : { selection: stored }));
   }
   if (stored && typeof stored === "object") {
-    const c = stored as Partial<ThemeChoice>;
-    return {
-      selection: c.selection ?? DEFAULT_THEME_CHOICE.selection,
-      autoLight: c.autoLight ?? DEFAULT_THEME_CHOICE.autoLight,
-      autoDark: c.autoDark ?? DEFAULT_THEME_CHOICE.autoDark,
-    };
+    return settled(asChoice(stored as Partial<ThemeChoice>));
   }
   return DEFAULT_THEME_CHOICE;
 }

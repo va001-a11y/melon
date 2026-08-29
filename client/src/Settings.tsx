@@ -1,6 +1,6 @@
 import type { Settings, Settings as SettingsType } from "./types";
 import { PACE_MAX, PACE_STEP, REPLY_LENGTHS, describePace } from "./defaults";
-import { DARK_THEMES, LIGHT_THEMES, SYSTEM, THEMES, systemPrefersDark, themeLabel, watchSystemScheme } from "./themes";
+import { THEMES } from "./themes";
 import type { ThemeChoice } from "./themes";
 import { useEffect, useState } from "react";
 import { SUPPORT_LABEL, SUPPORT_URL } from "./config";
@@ -17,8 +17,6 @@ interface Props {
 
 export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPipeline }: Props) {
   // Keep the "Match my system" description truthful if the device changes.
-  const [prefersDark, setPrefersDark] = useState(systemPrefersDark);
-  useEffect(() => watchSystemScheme(() => setPrefersDark(systemPrefersDark())), []);
 
   const patch = (p: Partial<SettingsType>) => onSettings({ ...settings, ...p });
   const replyKey = REPLY_LENGTHS.find((r) => r.tokens === settings.maxOutputTokens)?.key ?? "custom";
@@ -36,50 +34,6 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
         <section className="settings-section">
           <h3>Select theme</h3>
 
-          {/* Matching the system is a pairing of two palettes, not a palette. */}
-          <button
-            className={`theme-card auto-card ${theme.selection === SYSTEM ? "chosen" : ""}`}
-            onClick={() => onTheme({ ...theme, selection: SYSTEM })}
-          >
-            <span className="auto-swatches">
-              <span className={`theme-swatch swatch-${theme.autoLight}`} />
-              <span className={`theme-swatch swatch-${theme.autoDark}`} />
-            </span>
-            <span className="theme-name">Match my system</span>
-            <span className="theme-desc">
-              {themeLabel(theme.autoLight)} when your device is light, {themeLabel(theme.autoDark)} when it's dark.
-              Right now it's <b>{prefersDark ? "dark" : "light"}</b>, so you're seeing{" "}
-              <b>{themeLabel(prefersDark ? theme.autoDark : theme.autoLight)}</b>.
-            </span>
-          </button>
-
-          {theme.selection === SYSTEM && (
-            <div className="auto-pair">
-              <label>
-                Light palette
-                <select value={theme.autoLight} onChange={(e) => onTheme({ ...theme, autoLight: e.target.value })}>
-                  {LIGHT_THEMES.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Dark palette
-                <select value={theme.autoDark} onChange={(e) => onTheme({ ...theme, autoDark: e.target.value })}>
-                  {DARK_THEMES.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          )}
-
-          <p className="theme-or">or pick one that never changes</p>
-
           <div className="theme-grid">
             {THEMES.map((t) => (
               <button
@@ -93,16 +47,6 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
               </button>
             ))}
           </div>
-          {theme.selection === SYSTEM && (
-            <p className="settings-note">
-              This follows your browser's <code>prefers-color-scheme</code>, which reports{" "}
-              <b>{prefersDark ? "dark" : "light"}</b> right now. If that disagrees with your operating system, the
-              browser is overriding it, not Melon — most often because Melon is open in an embedded preview pane that
-              inherits its host app's theme, or because the browser has a forced theme. Opening{" "}
-              <code>http://localhost:5173</code> in a normal browser window usually fixes it. Otherwise just pick Paper
-              or Dusk, which always apply exactly.
-            </p>
-          )}
         </section>
 
         <section className="settings-section">
