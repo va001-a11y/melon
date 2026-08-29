@@ -31,6 +31,7 @@ const INCLUDE = [
   "package.json",
   "package-lock.json",
   "README.md",
+  "docs",
   "LICENSE",
   // Shipped so an unzipped copy can seed a git repo without re-deriving it.
   ".gitignore",
