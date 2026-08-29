@@ -181,6 +181,8 @@ export interface AgentResponse {
   replyLimit?: number;
   /** Pages the model consulted, when web search was on. */
   citations?: Citation[];
+  /** Whether web search was requested for this agent on this run. */
+  searched?: boolean;
 }
 
 export interface RunMessage {

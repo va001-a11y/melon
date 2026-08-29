@@ -343,6 +343,14 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
         // Pages the model consulted, when it searched. Without these the
         // search is invisible: the answer is better but unverifiable.
         citations: result.citations,
+        /*
+         * Whether search was actually asked for. Reported separately from the
+         * citations so the card can tell three different situations apart:
+         * search off, search on and grounded, search on but nothing cited.
+         * Without this, "no sources" is ambiguous — and the ambiguity hides
+         * the dangerous case, where a model invents specifics unchecked.
+         */
+        searched: agent.webSearch === true,
       });
     } catch (err: unknown) {
       tokenGuard.settleInflight(streamedChars);

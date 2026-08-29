@@ -15,7 +15,7 @@ export interface RunCallbacks {
     agentId: string,
     usage: Usage,
     round?: number,
-    meta?: { finishReason?: string; replyLimit?: number; citations?: Citation[] }
+    meta?: { finishReason?: string; replyLimit?: number; citations?: Citation[]; searched?: boolean }
   ) => void;
   onAgentError: (agentId: string, message: string, round?: number) => void;
   onAgentStopped: (agentId: string, round?: number) => void;
@@ -347,6 +347,7 @@ function dispatch(event: string, data: any, callbacks: RunCallbacks): boolean {
           finishReason: data.finishReason,
           replyLimit: data.replyLimit,
           citations: data.citations,
+          searched: data.searched,
         });
         break;
       case "agent-error":

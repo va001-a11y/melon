@@ -464,6 +464,7 @@ export default function App() {
             finishReason: meta?.finishReason as AgentResponse["finishReason"],
             replyLimit: meta?.replyLimit,
             citations: meta?.citations,
+            searched: meta?.searched,
           })),
         onAgentError: (id, message, round) =>
           updateRun(at(round), id, (r) => ({ ...r, status: "error", error: message })),
@@ -570,6 +571,7 @@ export default function App() {
               finishReason: meta?.finishReason as AgentResponse["finishReason"],
               replyLimit: meta?.replyLimit,
               citations: meta?.citations,
+            searched: meta?.searched,
             })),
           onAgentError: (id, message) => updateRun(blockId, id, (r) => ({ ...r, status: "error", error: message })),
           onAgentStopped: (id) => updateRun(blockId, id, (r) => ({ ...r, status: "stopped" })),

@@ -236,6 +236,19 @@ function AgentCard({
         Collapsed by default — a search can cite a dozen pages, and expanding
         every card by default would bury the answers.
       */}
+      {/*
+        Search was asked for and the model cited nothing. Worth saying out
+        loud: an ungrounded answer that looks researched is the failure this
+        whole feature exists to prevent, and silence here is indistinguishable
+        from search being switched off.
+      */}
+      {response.status === "done" && response.searched && !response.citations?.length && (
+        <div className="cutoff-note">
+          <b>No sources returned.</b> Web search was on, but this model cited nothing — so treat any specific
+          figures, dates or names below as unverified.
+        </div>
+      )}
+
       {response.citations && response.citations.length > 0 && (
         <details className="sources">
           <summary>
