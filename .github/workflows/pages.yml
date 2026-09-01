@@ -23,13 +23,17 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+# Actions are pinned to major versions so security patches arrive without a
+# commit here. They were bumped off v4/v3 because those run on Node 20, which
+# GitHub is retiring on its runners. Note the majors differ: checkout and
+# setup-node are on v7, the two Pages actions on v5.
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -47,7 +51,7 @@ jobs:
       # /melon/ base path that a project site needs.
       - run: npm run build:web -w client
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: client/dist
 
@@ -59,4 +63,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
