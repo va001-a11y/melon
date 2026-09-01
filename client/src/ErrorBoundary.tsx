@@ -28,6 +28,41 @@ function melonKeys(): string[] {
   }
 }
 
+/**
+ * Describe what clearing would actually destroy.
+ *
+ * A raw key count is accurate and useless: nine of Melon's keys exist no
+ * matter what you have done — settings, theme, presets, team names — so a
+ * brand-new install with a single conversation reports "10 saved items",
+ * which reads as far more at stake than there is. The person is deciding
+ * whether to press a destructive button, so the number has to be the thing
+ * they would actually miss.
+ *
+ * Every read is defensive: this renders precisely when stored data has already
+ * proved malformed enough to crash the app.
+ */
+function describeStored(): string {
+  const keys = melonKeys();
+  if (keys.length === 0) return "Melon has nothing saved in this browser.";
+
+  const chats = keys.filter((k) => k.startsWith(`${MELON_PREFIX}chat.`)).length;
+
+  let agents = 0;
+  try {
+    const raw = JSON.parse(localStorage.getItem(`${MELON_PREFIX}agents`) ?? "[]");
+    if (Array.isArray(raw)) agents = raw.length;
+  } catch {
+    /* unreadable — leave the count at zero rather than guessing */
+  }
+
+  const parts: string[] = [];
+  if (chats > 0) parts.push(`${chats} conversation${chats === 1 ? "" : "s"}`);
+  if (agents > 0) parts.push(`${agents} agent${agents === 1 ? "" : "s"}`);
+
+  if (parts.length === 0) return "Melon is holding your settings, but no conversations or agents.";
+  return `Melon is holding ${parts.join(" and ")}, plus your settings and any API keys.`;
+}
+
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { error: null };
 
@@ -59,9 +94,10 @@ export class ErrorBoundary extends Component<Props, State> {
 
   private clearAndReload = (): void => {
     const keys = melonKeys();
+    // Same wording as the panel, so the confirmation cannot say something
+    // different from what the user just read.
     const ok = confirm(
-      `This deletes Melon's ${keys.length} saved item${keys.length === 1 ? "" : "s"} — ` +
-        `your chats, agents and API keys — and reloads.\n\n` +
+      `${describeStored()}\n\nAll of it will be deleted and Melon will reload. ` +
         `Nothing belonging to other sites is touched. This cannot be undone.`
     );
     if (!ok) return;
@@ -89,8 +125,7 @@ export class ErrorBoundary extends Component<Props, State> {
           </p>
           <p className="crash-cause">
             The usual cause is <strong>damaged saved data</strong> — a chat, agent or preset stored by an
-            older version in a shape this version doesn't recognise. Melon is holding{" "}
-            {keyCount} saved item{keyCount === 1 ? "" : "s"} right now.
+            older version in a shape this version doesn't recognise. {describeStored()}
           </p>
 
           <div className="crash-actions">
