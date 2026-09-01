@@ -104,6 +104,7 @@ function AgentCard({
   const roleLabel = ROLES.find((r) => r.key === response.role)?.label ?? response.role;
   const [flagged, setFlagged] = useState(false);
   const [copied, setCopied] = useState<"no" | "yes" | "failed">("no");
+  const [noteDismissed, setNoteDismissed] = useState(false);
 
   /**
    * Copy the reply, with a fallback and — importantly — a visible failure.
@@ -240,15 +241,39 @@ function AgentCard({
         every card by default would bury the answers.
       */}
       {/*
-        Search was asked for and the model cited nothing. Worth saying out
-        loud: an ungrounded answer that looks researched is the failure this
-        whole feature exists to prevent, and silence here is indistinguishable
-        from search being switched off.
+        An answer with no sources is unverified whether or not search ran, so
+        the warning is shown either way — with different wording, because the
+        two situations differ: search on and nothing cited means the model had
+        the chance and took none, while search off means it answered from
+        training data alone.
+
+        Dismissable, because it appears on every sourceless reply and would
+        otherwise become wallpaper. Dismissing is per reply and per session:
+        the next answer warns again, since that one is a fresh claim.
       */}
-      {response.status === "done" && response.searched && !response.citations?.length && (
-        <div className="cutoff-note">
-          <b>No sources returned.</b> Web search was on, but this model cited nothing — so treat any specific
-          figures, dates or names below as unverified.
+      {response.status === "done" && (answer || cot) && !response.citations?.length && !noteDismissed && (
+        <div className="cutoff-note unverified-note">
+          <span>
+            {response.searched ? (
+              <>
+                <b>No sources returned.</b> Web search was on, but this model cited nothing — so treat any
+                specific figures, dates or names below as unverified.
+              </>
+            ) : (
+              <>
+                <b>Not checked against sources.</b> This is written from the model's training data, so treat any
+                specific figures, dates or names below as unverified.
+              </>
+            )}
+          </span>
+          <button
+            className="note-dismiss"
+            onClick={() => setNoteDismissed(true)}
+            aria-label="Hide this notice"
+            title="Hide this notice for this reply"
+          >
+            ✕
+          </button>
         </div>
       )}
 

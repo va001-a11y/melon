@@ -2782,3 +2782,40 @@ body {
   font-size: 11px;
   margin-left: 6px;
 }
+
+/* ---------- "Not checked against sources" notice ----------
+ * Appears on every sourceless reply, so it is deliberately quieter than the
+ * cut-off and safety notices it shares a class with, and can be dismissed.
+ */
+.unverified-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.unverified-note > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.note-dismiss {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.note-dismiss:hover {
+  color: var(--text);
+  background: var(--bg-panel);
+}
+
+.note-dismiss:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
