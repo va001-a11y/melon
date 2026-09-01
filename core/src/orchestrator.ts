@@ -374,9 +374,10 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
       if (hasConcluded(raw)) agreed.add(agent.id);
       else agreed.delete(agent.id);
 
-      // Also drop a speaker label the model wrote itself; left in, it would
-      // be re-labelled by buildMessages next turn as "[Name]: [Name]: …".
-      const answer = stripSpeakerLabel(stripConclusion(raw)).trim();
+      // Drop a speaker label the model wrote itself. Left in, buildMessages
+      // would re-label it next turn as "[Name]: [Name]: …" — and a teammate's
+      // name would enter the history as though they had actually said it.
+      const answer = stripSpeakerLabel(stripConclusion(raw), req.agents.map((a) => a.name)).trim();
       if (answer) priorThisRound.push({ agentName: agent.name, content: answer });
       sink.send("agent-done", {
         agentId: agent.id,

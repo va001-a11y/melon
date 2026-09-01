@@ -37,19 +37,48 @@ export interface SplitResult {
  * Also hides a half-written label mid-stream, so "[Gen" never flickers into
  * view before its closing bracket arrives.
  */
-export function stripSpeakerLabel(text: string): string {
-  const complete = text.replace(/^\s*\[[^\]\n]{1,60}\]:[ \t]*/, "");
-  if (complete !== text) return complete;
+function escapeForRegex(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Remove a speaker label the model wrote at the start of its own reply.
+ *
+ * "[Name]: …" is imitation of Melon's transcript format. "Name: …" with no
+ * brackets is the worse case: models continuing a multi-speaker transcript
+ * write the NEXT speaker's turn, so an agent publishes words under a
+ * teammate's name — and if that teammate errored, the user reads a
+ * contribution nobody made.
+ *
+ * The bare form is stripped only for a name actually in this run, so replies
+ * legitimately opening "Note:" or "Answer:" are untouched.
+ *
+ * The trade-off, stated plainly: an agent literally named "Note" writing
+ * "Note: …" loses that word. That is accepted, because the alternative is an
+ * agent publishing under a teammate's name — which is how a user ends up
+ * reading a contribution from an agent that errored and never ran.
+ */
+export function stripSpeakerLabel(text: string, agentNames: string[] = []): string {
+  const bracketed = text.replace(/^\s*\[[^\]\n]{1,60}\]:[ \t]*/, "");
+  if (bracketed !== text) return bracketed;
+
+  for (const name of agentNames) {
+    const trimmed = name?.trim();
+    if (!trimmed) continue;
+    const bare = new RegExp(`^\\s*${escapeForRegex(trimmed)}\\s*:[ \\t]*`, "i");
+    if (bare.test(text)) return text.replace(bare, "");
+  }
+
   if (/^\s*\[[^\]\n]{0,60}$/.test(text)) return "";
   return text;
 }
 
 /** Split a (possibly still-streaming) response into Detailed CoT and answer. */
-export function splitCot(text: string): SplitResult {
+export function splitCot(text: string, agentNames: string[] = []): SplitResult {
   text = stripConclusion(text);
   const startIdx = text.indexOf(COT_START);
   if (startIdx < 0) {
-    return { cot: "", answer: stripSpeakerLabel(text), reasoningInProgress: false };
+    return { cot: "", answer: stripSpeakerLabel(text, agentNames), reasoningInProgress: false };
   }
   const afterStart = text.slice(startIdx + COT_START.length);
   const endIdx = afterStart.indexOf(COT_END);
@@ -58,7 +87,7 @@ export function splitCot(text: string): SplitResult {
   }
   return {
     cot: afterStart.slice(0, endIdx).trim(),
-    answer: stripSpeakerLabel(afterStart.slice(endIdx + COT_END.length).trim()),
+    answer: stripSpeakerLabel(afterStart.slice(endIdx + COT_END.length).trim(), agentNames),
     reasoningInProgress: false,
   };
 }

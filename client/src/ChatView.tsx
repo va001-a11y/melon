@@ -83,6 +83,7 @@ function AgentCard({
   showTeam,
   onRerun,
   busy,
+  agentNames,
 }: {
   response: AgentResponse;
   onFlag: (agentId: string) => void;
@@ -96,8 +97,10 @@ function AgentCard({
   showTeam: boolean;
   onRerun: (agentId: string, mode: "retry" | "regenerate" | "continue") => void;
   busy: boolean;
+  /** Everyone in this run, so a reply opening with a teammate's name is caught. */
+  agentNames: string[];
 }) {
-  const { cot, answer, reasoningInProgress } = splitCot(response.text);
+  const { cot, answer, reasoningInProgress } = splitCot(response.text, agentNames);
   const roleLabel = ROLES.find((r) => r.key === response.role)?.label ?? response.role;
   const [flagged, setFlagged] = useState(false);
   const [copied, setCopied] = useState<"no" | "yes" | "failed">("no");
@@ -532,6 +535,7 @@ export function ChatView({
                       showTeam={new Set(m.agentOrder.map((x) => m.responses[x]?.team ?? 1)).size > 1}
                       onRerun={(agentId, mode) => onRerun(m.id, agentId, mode)}
                       busy={running}
+                      agentNames={m.agentOrder.map((x) => m.responses[x]?.name).filter(Boolean) as string[]}
                     />
                   );
                 })}

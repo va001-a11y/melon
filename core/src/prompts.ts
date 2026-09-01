@@ -133,6 +133,21 @@ export function buildSystemPrompt(agent: AgentSpec, settings: RunSettings, teamN
       "can tell who said what — they are not part of anyone's reply. Never write such a label yourself. Start " +
       "straight into your answer, with no name, prefix or preamble."
   );
+  /*
+   * The impersonation guard. Shown a multi-speaker transcript, models tend to
+   * continue it — writing the NEXT speaker's turn rather than their own. An
+   * agent then publishes words under a teammate's name, and if that teammate
+   * failed or never ran, the user reads a contribution nobody made. Naming the
+   * other agents makes the instruction concrete rather than abstract.
+   */
+  parts.push(
+    `Write ONLY your own turn, as ${agent.name}. Do not continue the transcript, do not write a turn for anyone ` +
+      `else, and never begin with another agent's name.` +
+      (teamNames.length > 1
+        ? ` The other agents — ${teamNames.filter((n) => n !== agent.name).join(", ")} — speak for themselves; ` +
+          `if one of them has not answered, say nothing on their behalf.`
+        : "")
+  );
   parts.push("Keep your answer focused on your role. Other agents cover other angles — do not duplicate their work.");
 
   if (!settings.parallel && teamNames.length > 1) {
@@ -237,10 +252,45 @@ export interface PriorTurn {
  * into view before the closing bracket arrives — the same reason
  * stripConclusion handles partial markers.
  */
-export function stripSpeakerLabel(text: string): string {
-  // A completed label: "[" up to 60 chars with no newline, "]" then a colon.
-  const complete = text.replace(/^\s*\[[^\]\n]{1,60}\]:[ \t]*/, "");
-  if (complete !== text) return complete;
+function escapeForRegex(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Remove a speaker label the model wrote at the start of its own reply.
+ *
+ * Two shapes, and the second is the dangerous one.
+ *
+ * "[Name]: …" is imitation of Melon's own transcript format, which labels
+ * earlier turns so agents can tell each other apart.
+ *
+ * "Name: …" — a bare prefix with no brackets — is worse, because models
+ * continuing a multi-speaker transcript tend to write the NEXT speaker's turn
+ * rather than their own. An agent then publishes words under a teammate's
+ * name, and if that teammate failed or never ran, the user reads a
+ * contribution nobody made.
+ *
+ * The bare form is only stripped when the name matches an agent actually in
+ * this run. Stripping any "Word:" opener would eat legitimate replies that
+ * begin "Note:", "Answer:" or "Summary:".
+ *
+ * The trade-off, stated plainly: an agent literally named "Note" writing
+ * "Note: …" loses that word. That is accepted, because the alternative is an
+ * agent publishing under a teammate's name — which is how a user ends up
+ * reading a contribution from an agent that errored and never ran.
+ */
+export function stripSpeakerLabel(text: string, agentNames: string[] = []): string {
+  // Bracketed, any name.
+  const bracketed = text.replace(/^\s*\[[^\]\n]{1,60}\]:[ \t]*/, "");
+  if (bracketed !== text) return bracketed;
+
+  // Bare, but only for a name belonging to this run.
+  for (const name of agentNames) {
+    const trimmed = name?.trim();
+    if (!trimmed) continue;
+    const bare = new RegExp(`^\s*${escapeForRegex(trimmed)}\s*:[ \t]*`, "i");
+    if (bare.test(text)) return text.replace(bare, "");
+  }
 
   // Still being written: an unclosed bracket at the very start, short enough
   // to plausibly be a label rather than prose that happens to open with "[".

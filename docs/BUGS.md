@@ -249,6 +249,26 @@ refuse to build when `package.json` declares a workspace the list does not
 cover — verified by removing the entries and watching it exit with
 "Refusing to package".
 
+### Agents impersonating each other
+
+An agent opened its reply with **another agent's name**: `B: Adding to the
+texture comparison…`, written by agent A. Agent B had errored and never ran,
+so the user was reading a contribution from an agent that produced nothing.
+
+Shown a multi-speaker transcript, a model tends to continue it — writing the
+*next* speaker's turn rather than its own. The earlier speaker-label fix did
+not catch this, because it only matched the bracketed `[Name]:` form Melon
+itself uses, and this was a bare `B:`.
+
+Fixed in two places. The prompt now says: write only your own turn, do not
+continue the transcript, and if a teammate has not answered, say nothing on
+their behalf. And `stripSpeakerLabel` takes the run's roster and strips a bare
+`Name:` opener when it matches an agent actually present — checked against the
+roster rather than any `Word:`, so replies beginning "Summary:" survive.
+
+**Accepted trade-off:** an agent literally named "Note" writing "Note: …"
+loses that word. Worth it against an agent publishing under a teammate's name.
+
 ### Themes
 
 "Match my system" was removed rather than fixed again. It resolved correctly
