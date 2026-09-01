@@ -2,7 +2,13 @@
 
 Universal multi-model AI: bring your own keys, activate the models you want, and let them work through a question **together** — taking turns and building on each other, not shouting over each other. A **Stop** button next to Send kills all activity instantly.
 
-## Run it
+### ▶ Try it now — [va001-a11y.github.io/melon](https://va001-a11y.github.io/melon/)
+
+Nothing to install. Pick **Melon demo (no key)** and watch two models take turns, or paste your own provider key. Everything runs in your browser: there is no Melon server, and your keys go straight from your browser to the provider you chose.
+
+The hosted version reaches 17 of the 23 providers. Local models (Ollama, LM Studio, llama.cpp) and three services that refuse browser requests need the desktop version below — they are listed in the picker, greyed out, saying which.
+
+## Run it on your machine
 
 **Windows:** double-click **`Melon.bat`**. **macOS / Linux:** run **`./melon.command`** (on macOS, `chmod +x melon.command` once makes it double-clickable in Finder). Both are two-line wrappers around `scripts/launch.mjs`, so all three platforms share one implementation and cannot drift apart.
 
@@ -118,7 +124,11 @@ One thing to avoid: **don't email the zip.** Gmail blocks `.bat` attachments out
 
 Melon also builds as a static site that runs entirely in the browser — no
 Node, no install, no server. The same core does the orchestrating; only the
-transport differs.
+transport differs. It is live at
+**[va001-a11y.github.io/melon](https://va001-a11y.github.io/melon/)**, published
+from this repository by `.github/workflows/pages.yml`.
+
+To run that build locally:
 
 ```bash
 npm run web
