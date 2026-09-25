@@ -80,6 +80,16 @@ The catch worth knowing: browser storage is tied to the exact address, **includi
 
 Since it is browser storage, clearing your browsing data — or using a different browser — starts you fresh. Use **Presets → Export my agents** to keep a copy of a line-up you care about.
 
+### Security, and what Melon does not do
+
+Melon is bring-your-own-key. Your keys stay in your browser, requests go straight from your machine to the provider you chose, and there is no Melon server, no account and no logging. Nobody but you and that provider sees a conversation.
+
+**Melon adds no content filtering of its own, deliberately.** It is your key, your machine, and your agreement with the provider — who already enforce their own policies and can act on a key, which Melon cannot. A filter inside an MIT-licensed app you compile yourself would stop nobody who wanted it gone, while blocking legitimate questions for everyone who did not. The exception would be a hosted Melon running on someone else's key: that changes who the operator is, and it would need rate limiting and refusal. The demo on the web version is canned and keyless for exactly this reason.
+
+**What Melon does defend against is the opposite direction: text arriving from outside trying to give your agents orders.** Agents are told that only your message sets the task, and that teammates' turns, web search results and attachments are material to weigh rather than instructions to obey. This matters more here than in a single-model chat, because Melon is a relay — one agent's reply becomes the next agent's input, so a hostile web page could otherwise travel down the whole line.
+
+That is a prompt instruction, not a sandbox, so treat it as a speed bump rather than a wall. The standing advice is the one Melon shows you in the app: a reply that cites no sources is unverified, whoever wrote it.
+
 ### Sending Melon to another computer
 
 Don't copy the whole folder — run this instead:

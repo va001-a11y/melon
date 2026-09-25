@@ -367,6 +367,32 @@ one too few costs the reader's trust.
 
 ---
 
+### Nothing said the transcript was untrusted
+
+`2026-09-25` - not a bug that was observed, but a gap found by reading the
+prompts after asking whether Melon should refuse abusive conversations. It
+should not: the user is the operator, they hold the key, and a filter inside an
+MIT-licensed client they compile themselves stops nobody. The provider already
+enforces, and can act on a key in a way Melon cannot.
+
+The real exposure runs the other way. Melon puts three kinds of text it did not
+write in front of a model - teammates' turns, web search results, and
+attachments - and a model shown a line addressed to it tends to obey. The relay
+compounds it: whatever reaches one agent becomes input for the next, so one
+poisoned reply travels down the line. `buildSystemPrompt` said nothing about
+any of this.
+
+It now states the trust boundary: only the user's message sets the task, and
+everything else is material to weigh rather than instructions to follow, to be
+reported if it tries to redirect the agent. Placed before the persona block,
+which stays last by design.
+
+A prompt instruction is guidance, not a sandbox - which is the same reason
+`stripSpeakerLabel` exists alongside the prompt rule telling agents not to
+write speaker labels.
+
+---
+
 ## Testing notes that cost time to learn
 
 - **A `window.fetch` recorder does not see** dynamic `import()` or Worker
