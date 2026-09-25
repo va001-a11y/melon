@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AgentResponse, Attachment, Message } from "./types";
 
 import { splitCot } from "./cot";
+import { hasCheckableClaim } from "./claims";
 import { ROLES } from "./defaults";
 import { formatUsd } from "./cost";
 import type { Estimate } from "./cost";
@@ -247,11 +248,19 @@ function AgentCard({
         the chance and took none, while search off means it answered from
         training data alone.
 
-        Dismissable, because it appears on every sourceless reply and would
-        otherwise become wallpaper. Dismissing is per reply and per session:
-        the next answer warns again, since that one is a fresh claim.
+        Shown only on replies that state something checkable — see
+        hasCheckableClaim. On a greeting it warned about figures and dates
+        that were not there, and a warning that appears on everything is read
+        on nothing. The answer is tested, not the reasoning drawer: the
+        warning speaks about the text below it.
+
+        Still dismissable per reply and per session: the next answer warns
+        again, since that one is a fresh claim.
       */}
-      {response.status === "done" && (answer || cot) && !response.citations?.length && !noteDismissed && (
+      {response.status === "done" &&
+        hasCheckableClaim(answer) &&
+        !response.citations?.length &&
+        !noteDismissed && (
         <div className="cutoff-note unverified-note">
           <span>
             {response.searched ? (

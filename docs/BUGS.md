@@ -341,6 +341,32 @@ client-side, but it is one protocol parsed two ways in two places.
 
 ---
 
+### A warning on every reply is a warning on none
+
+`176b7fe` made the unverified-sources notice appear on every sourceless reply.
+On *"Hello! How can I assist you today?"* it then advised treating the figures
+and dates below as unverified, when the reply contained neither - two warnings
+on a two-line greeting.
+
+That is pattern 4 inverted. Not a control nobody can find, but a warning
+everybody stops reading - and the reply it has to be read on looked exactly
+like the ones it was crying wolf over: an invented September 2026 avalanche in
+Tibet, with a death toll, a survivor count and a government response, produced
+with search off.
+
+It now shows only where there is something checkable to doubt: bare numbers,
+quantities written as words, and month names. Deliberately **not** proper
+nouns - "Melon", "Groq" and every model name are proper nouns, so keying on
+them would fire on nearly every reply and rebuild the problem. Code blocks,
+inline code, list markers, version strings, identifiers and URL paths are
+excluded, so `npm ci`, `v0.2.0` and `gpt-oss-120b` do not trip it. "one" and
+"two" are excluded because "one of the reasons" is prose, not a quantity.
+
+Conservative when unsure: it returns true. A warning too many costs a glance,
+one too few costs the reader's trust.
+
+---
+
 ## Testing notes that cost time to learn
 
 - **A `window.fetch` recorder does not see** dynamic `import()` or Worker
