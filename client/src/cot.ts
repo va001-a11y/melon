@@ -73,21 +73,82 @@ export function stripSpeakerLabel(text: string, agentNames: string[] = []): stri
   return text;
 }
 
-/** Split a (possibly still-streaming) response into Detailed CoT and answer. */
+/**
+ * Remove a marker that is still arriving one character at a time.
+ *
+ * Mid-stream the answer briefly ends with "===REASO" before the rest of the
+ * marker lands, which flickers Melon's own machinery into the reply.
+ */
+function stripTrailingPartial(text: string, marker: string): string {
+  for (let i = marker.length - 1; i > 0; i--) {
+    if (text.endsWith(marker.slice(0, i))) return text.slice(0, -i);
+  }
+  return text;
+}
+
+/**
+ * Drop the single line break that belongs to the marker, not to the model.
+ *
+ * The format asked for is "===ANSWER===" then a newline then the answer, so
+ * that newline is punctuation of Melon's own protocol. Left in, a continuation
+ * resuming a broken word renders as "high-alt ...high-altitude" — a space
+ * inside a word, which reads as a bug. Only one is removed: a blank line the
+ * model wrote deliberately survives.
+ */
+function dropProtocolNewline(text: string): string {
+  if (text.startsWith("\r\n")) return text.slice(2);
+  if (text.startsWith("\n")) return text.slice(1);
+  return text;
+}
+
+/**
+ * Split a (possibly still-streaming) response into Detailed CoT and answer.
+ *
+ * A reply can hold MORE THAN ONE reasoning/answer pair. Continue appends the
+ * new reply onto the cut-off one, and if Detailed CoT is on that second reply
+ * opens with its own ===REASONING=== block. Reading only the first pair —
+ * which is what this did — left every later marker sitting in the answer,
+ * along with the model's private planning for the continuation. So scan the
+ * whole text: every reasoning section joins the drawer, every answer section
+ * joins the answer.
+ *
+ * Answer segments are joined with nothing between them, because the model was
+ * asked to carry straight on from a sentence it left unfinished. Whatever
+ * whitespace it emitted is kept as it came, rather than guessed at here.
+ */
 export function splitCot(text: string, agentNames: string[] = []): SplitResult {
   text = stripConclusion(text);
-  const startIdx = text.indexOf(COT_START);
-  if (startIdx < 0) {
-    return { cot: "", answer: stripSpeakerLabel(text, agentNames), reasoningInProgress: false };
+
+  const reasonings: string[] = [];
+  const answers: string[] = [];
+  let rest = text;
+  let reasoningInProgress = false;
+
+  for (;;) {
+    const startIdx = rest.indexOf(COT_START);
+    if (startIdx < 0) {
+      answers.push(rest);
+      break;
+    }
+    answers.push(rest.slice(0, startIdx));
+
+    const afterStart = rest.slice(startIdx + COT_START.length);
+    const endIdx = afterStart.indexOf(COT_END);
+    if (endIdx < 0) {
+      // Still inside the reasoning section: nothing after it has arrived yet.
+      reasonings.push(afterStart);
+      reasoningInProgress = true;
+      break;
+    }
+    reasonings.push(afterStart.slice(0, endIdx));
+    rest = dropProtocolNewline(afterStart.slice(endIdx + COT_END.length));
   }
-  const afterStart = text.slice(startIdx + COT_START.length);
-  const endIdx = afterStart.indexOf(COT_END);
-  if (endIdx < 0) {
-    return { cot: afterStart.trim(), answer: "", reasoningInProgress: true };
-  }
+
+  const answer = stripTrailingPartial(answers.join(""), COT_START).trim();
+
   return {
-    cot: afterStart.slice(0, endIdx).trim(),
-    answer: stripSpeakerLabel(afterStart.slice(endIdx + COT_END.length).trim(), agentNames),
-    reasoningInProgress: false,
+    cot: reasonings.map((r) => r.trim()).filter(Boolean).join("\n\n"),
+    answer: stripSpeakerLabel(answer, agentNames),
+    reasoningInProgress,
   };
 }

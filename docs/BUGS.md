@@ -308,6 +308,39 @@ page's own bar and leaves every inner panel with the default.
 
 ---
 
+## After v0.2.0 (2026-09-25)
+
+### Continue pasted two replies together without re-reading them
+
+`2026-09-25` - Continue appends the new reply onto the cut-off one. With
+Detailed CoT on, that second reply opens with its own `===REASONING===` block,
+and `splitCot` read only the FIRST marker pair. Everything after it became
+"the answer", markers and all - including the model's private planning for the
+continuation, which the user read as content: *"The user asks to continue
+exactly where the previous response stopped..."*
+
+The display was the least of it. The merged text is what gets **saved**, so the
+markers survived reload, Copy copied them, and they went back to every agent as
+transcript - teaching the models that Melon's own protocol markers are ordinary
+conversation text.
+
+`splitCot` now scans the whole reply: every reasoning section joins the drawer,
+every answer section joins the answer. It is the single chokepoint for display,
+history, the continue seed and consensus, so one change covers all four - and
+repairs chats already saved in the broken shape rather than leaving them
+corrupted.
+
+**Also fixed:** the newline after `===ANSWER===` belongs to the format, not to
+the model. Left in, a continuation resuming a broken word rendered as
+"high-alt ...high-altitude" - a space inside a word.
+
+**Still divergent:** `core/src/orchestrator.ts` parses the same markers with
+`.split(COT_END).pop()` - the last block, where the client now takes all of
+them. It cannot cause the bug above, because the merge only happens
+client-side, but it is one protocol parsed two ways in two places.
+
+---
+
 ## Testing notes that cost time to learn
 
 - **A `window.fetch` recorder does not see** dynamic `import()` or Worker
