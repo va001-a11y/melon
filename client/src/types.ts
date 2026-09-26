@@ -51,6 +51,12 @@ export interface Settings {
   formatReplies: boolean;
   /** Set per-run when tone changed mid-chat; not persisted. */
   styleChangedFrom?: string;
+  /**
+   * Melon-side web search, which gives search to providers that have none of
+   * their own — including local models. Both fields are needed before it runs.
+   */
+  searchProvider: string;
+  searchApiKey: string;
   /** Pipeline team names and briefs, keyed by team number. */
   teamNames?: Record<string, string>;
   teamBriefs?: Record<string, string>;

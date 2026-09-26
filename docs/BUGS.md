@@ -429,6 +429,37 @@ prime suspect on reasoning, and a stopwatch outranked the reasoning.
 
 ---
 
+### Search existed for five providers and nowhere else
+
+`2026-09-26` - a gap rather than a defect, but the same shape as the ones
+above. Web search was provider-native only, so on Groq, Mistral, DeepSeek or
+any local model the toggle was simply disabled. That is honest, but it left
+the majority of the catalog answering from training data with no way to check
+anything - and the Nepal fabrication is what that looks like when it goes
+wrong.
+
+Melon now runs the search itself when the provider cannot: Tavily or Brave,
+the user's own key, results handed to the model as numbered material and
+attached to the reply as citations. Local models included, which no
+provider-native search could ever reach.
+
+Three decisions worth recording:
+
+- **It fails loudly.** Search on, no way to run it, and the agent errors
+  instead of answering. Silence here is exactly pattern 1.
+- **Round 0 only.** Later rounds are agents discussing what was already
+  found; re-searching each round would spend the user's quota re-fetching the
+  same pages.
+- **The results are prepended to the user's message, not sent as their own
+  turn.** Most APIs reject two user messages in a row, and the question
+  should still be the last thing the model reads.
+
+The search block is labelled as material rather than instructions, which is
+the TRUST clause added the day before doing the job it was written for: this
+feature is what puts open-web text into the prompt.
+
+---
+
 ## Testing notes that cost time to learn
 
 - **A `window.fetch` recorder does not see** dynamic `import()` or Worker

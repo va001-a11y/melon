@@ -854,6 +854,7 @@ export default function App() {
         {/* Tapping outside closes the drawer; inert on desktop. */}
         <div className="drawer-backdrop" onClick={() => setSidebarOpen(false)} />
         <Sidebar
+          melonSearch={Boolean(settings.searchProvider && settings.searchApiKey.trim())}
           agents={agents}
           setAgents={setAgents}
           providers={registry?.providers ?? []}

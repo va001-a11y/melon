@@ -334,7 +334,14 @@ export function buildMessages(
    * spoken this round. It is the LAST thing the model reads, so it must
    * carry the actual directive rather than a generic nudge.
    */
-  followUp = "Now add your contribution, building on what your teammates said above."
+  followUp = "Now add your contribution, building on what your teammates said above.",
+  /**
+   * Results Melon fetched for this question, when the provider cannot search
+   * for itself. Prepended to the user's message rather than sent as its own
+   * turn: most APIs reject two user messages in a row, and the question
+   * should still be the last thing read.
+   */
+  searchContext = ""
 ): ChatMessage[] {
   const messages: ChatMessage[] = [];
   for (const turn of history) {
@@ -353,7 +360,11 @@ export function buildMessages(
     }
   }
 
-  messages.push({ role: "user", content: userMessage, attachments: attachments?.length ? attachments : undefined });
+  messages.push({
+    role: "user",
+    content: searchContext ? `${searchContext}\n\n---\n\n${userMessage}` : userMessage,
+    attachments: attachments?.length ? attachments : undefined,
+  });
 
   // Relay mode: show what teammates have already said about this same message.
   if (priorThisRound.length > 0) {

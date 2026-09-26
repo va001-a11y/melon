@@ -4,6 +4,7 @@ import { THEMES } from "./themes";
 import type { ThemeChoice } from "./themes";
 import { useEffect, useState } from "react";
 import { SUPPORT_LABEL, SUPPORT_URL } from "./config";
+import { SEARCH_PROVIDERS, getSearchProvider } from "@melon/core";
 
 interface Props {
   settings: SettingsType;
@@ -158,6 +159,75 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
               onChange={(e) => patch({ detailedCoT: e.target.checked })}
             />
           </label>
+        </section>
+
+        {/*
+          Web search for providers that have none.
+
+          Five providers search natively and need nothing here. Everything
+          else — Groq, Mistral, DeepSeek, and every local model — has no
+          search tool at all, and this is what gives them one. It costs a
+          second signup, which is why the free tier is stated next to the
+          field rather than discovered later.
+        */}
+        <section className="settings-section">
+          <h3>Web search</h3>
+
+          <label className="settings-row">
+            <span>
+              Search provider
+              <small>
+                Gives web search to providers that cannot search on their own, local models included. Providers
+                with their own search keep using it
+              </small>
+            </span>
+            <select
+              value={settings.searchProvider}
+              onChange={(e) => patch({ searchProvider: e.target.value })}
+            >
+              <option value="">None — only providers with built-in search</option>
+              {SEARCH_PROVIDERS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label} — {p.freeTier} free
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {settings.searchProvider && (
+            <>
+              <label className="settings-row">
+                <span>
+                  Search API key
+                  <small>
+                    Stored in this browser, exactly like your model keys, and sent only to{" "}
+                    {getSearchProvider(settings.searchProvider)?.label ?? "the search provider"}
+                  </small>
+                </span>
+                <input
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="Paste your key"
+                  value={settings.searchApiKey}
+                  onChange={(e) => patch({ searchApiKey: e.target.value })}
+                />
+              </label>
+
+              <p className="settings-note">
+                {getSearchProvider(settings.searchProvider)?.note}{" "}
+                <a
+                  href={getSearchProvider(settings.searchProvider)?.signupUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  Get a key
+                </a>
+                . Results are fetched by Melon and handed to the model as source material — treat what comes
+                back with the same care as any web page.
+              </p>
+            </>
+          )}
         </section>
 
         <section className="settings-section">

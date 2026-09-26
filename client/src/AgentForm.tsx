@@ -48,10 +48,15 @@ interface Props {
   providers: ProviderDef[];
   editingName: string | null;
   onSave: () => void;
+  /**
+   * True when Settings has a search provider and key, which means search is
+   * available on providers that cannot search for themselves.
+   */
+  melonSearch?: boolean;
   onRetryProviders?: () => void;
 }
 
-export function AgentForm({ draft, setDraft, providers, editingName, onSave, onRetryProviders }: Props) {
+export function AgentForm({ draft, setDraft, providers, editingName, onSave, melonSearch, onRetryProviders }: Props) {
   const [test, setTest] = useState<{ state: "idle" | "running" | "done"; ok?: boolean; message?: string }>({
     state: "idle",
   });
@@ -76,8 +81,16 @@ export function AgentForm({ draft, setDraft, providers, editingName, onSave, onR
     fetched.models.length > 0 ? fetched.models : detected.length > 0 ? detected : def?.exampleModels ?? [];
 
   /** Why this provider/model cannot search, or null when it can. */
-  const searchBlocked = webSearchBlockReason(def, draft.model);
+  const searchBlocked = webSearchBlockReason(def, draft.model, melonSearch === true);
   const searchAutomatic = webSearchIsAutomatic(def);
+  /*
+   * Which of the two searches would actually run. The distinction is not
+   * cosmetic: a native search happens inside the model's own reasoning and is
+   * billed by the provider, while Melon's runs once, before the model sees
+   * anything, and is billed by the search service. Saying "the provider looks
+   * things up itself" when Melon is doing it would be simply untrue.
+   */
+  const searchesItself = webSearchBlockReason(def, draft.model) === null;
 
   /** Whether the note under the picker is needed at all. */
   const anyBlocked = useMemo(
@@ -357,7 +370,9 @@ export function AgentForm({ draft, setDraft, providers, editingName, onSave, onR
               ? `${def?.label ?? "This provider"} always searches — nothing to switch on.`
               : searchBlocked
                 ? `Not available: ${searchBlocked}.`
-                : "The provider looks things up itself before answering. Costs extra per search."}
+                : searchesItself
+                  ? `${def?.label ?? "This provider"} looks things up itself while answering. Costs extra per search.`
+                  : "Melon searches the web and hands the results to this model, which cannot search on its own. Uses your search provider's quota."}
           </small>
         </span>
       </label>

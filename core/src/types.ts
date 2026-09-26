@@ -45,6 +45,12 @@ export interface AgentSpec {
 }
 
 export interface RunSettings {
+  /**
+   * Melon-side web search, for providers that cannot search themselves.
+   * Both are needed before it runs: an id from SEARCH_PROVIDERS and a key.
+   */
+  searchProvider?: string;
+  searchApiKey?: string;
   /** Conversation mode: professional | sitcom | meme | research | consensus */
   mode: string;
   detailedCoT: boolean;

@@ -32,6 +32,15 @@ export {
   RECOMMENDED_AGENTS,
 } from "./registry.js";
 
+export {
+  SEARCH_PROVIDERS,
+  formatSearchContext,
+  getSearchProvider,
+  runWebSearch,
+  trimQuery,
+} from "./search.js";
+export type { SearchHit, SearchProviderDef, SearchProviderId } from "./search.js";
+
 export { computeDynamicLimit, estimateTokens, tokenGuard } from "./guard.js";
 export { analytics } from "./analytics.js";
 export { stopController } from "./stop.js";

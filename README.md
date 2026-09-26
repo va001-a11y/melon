@@ -80,6 +80,23 @@ The catch worth knowing: browser storage is tied to the exact address, **includi
 
 Since it is browser storage, clearing your browsing data — or using a different browser — starts you fresh. Use **Presets → Export my agents** to keep a copy of a line-up you care about.
 
+### Web search
+
+Five providers search the web natively — Anthropic, Google, OpenRouter, Perplexity, and OpenAI's `-search-preview` models. Switch it on per agent and the model looks things up while it answers, billed by the provider.
+
+Everything else has no search tool at all. For those, **Melon can do the searching itself**: it queries a search API, hands the results to the model as source material, and lists them as sources on the reply. That includes local models — an Ollama model on your own machine can answer from today's web.
+
+Set it up in **Settings → Web search**. It needs its own key, separate from your model keys:
+
+| Service | Free tier | Returns |
+| --- | --- | --- |
+| [Tavily](https://tavily.com) | 1,000 searches a month | Cleaned page text — better answers |
+| [Brave Search](https://brave.com/search/api/) | 2,000 searches a month | Short descriptions |
+
+Providers that can search natively keep doing so; Melon's search is the fallback, and each agent's settings say which one it will use. If search is switched on and neither is available, that agent fails with a message rather than quietly answering from memory — an answer that looks researched and is not is worse than no answer.
+
+Search APIs are built server-to-server, so the hosted web build may be refused by CORS where the desktop build has no such limit. Melon reports what happened rather than guessing.
+
 ### Security, and what Melon does not do
 
 Melon is bring-your-own-key. Your keys stay in your browser, requests go straight from your machine to the provider you chose, and there is no Melon server, no account and no logging. Nobody but you and that provider sees a conversation.

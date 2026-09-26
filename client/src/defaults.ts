@@ -49,6 +49,10 @@ export const DEFAULT_SETTINGS: Settings = {
   rounds: 3,
   tokensPerMinute: 0,
   formatReplies: true,
+  // Off until the user adds a key: search is the one feature that needs a
+  // second signup, so it is opt-in rather than something to discover broken.
+  searchProvider: "",
+  searchApiKey: "",
 };
 
 /** Burn-rate slider bounds, in output tokens per minute. 0 = no limit. */

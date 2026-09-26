@@ -18,7 +18,9 @@ import {
 import type { PriorTurn } from "./prompts.js";
 import { stopController } from "./stop.js";
 import { HARD_AGENT_CAP } from "./registry.js";
-import { PROVIDERS, contextWindowFor, supportsVision } from "./catalog.js";
+import { PROVIDERS, contextWindowFor, getProvider, supportsVision, webSearchBlockReason } from "./catalog.js";
+import { formatSearchContext, getSearchProvider, runWebSearch, trimQuery } from "./search.js";
+import type { Citation } from "./types.js";
 import { computeDynamicLimit, estimateTokens, tokenGuard } from "./guard.js";
 import { analytics } from "./analytics.js";
 
@@ -312,6 +314,52 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
         );
       }
 
+      /*
+       * Web search for providers that cannot do it themselves.
+       *
+       * Five providers search natively; the rest have no tool to call, so an
+       * agent with search switched on would have quietly answered from
+       * training data — the failure this whole warning apparatus exists for.
+       * When a search provider is configured, Melon runs the search and hands
+       * the results over as material.
+       *
+       * Round 0 only. Later rounds are agents talking to each other about
+       * what was already found, and re-searching each one would burn the
+       * user's quota to re-fetch the same pages.
+       */
+      let searchContext = "";
+      let searchCitations: Citation[] | undefined;
+      if (agent.webSearch === true && round === 0) {
+        const def = getProvider(agent.provider);
+        const searchesItself = webSearchBlockReason(def, agent.model) === null;
+        const engine = getSearchProvider(req.settings.searchProvider);
+        const searchKey = req.settings.searchApiKey?.trim();
+
+        if (!searchesItself) {
+          /*
+           * Loud, not silent. A missing search key with the toggle on is the
+           * same shape as the bug that invented casualty figures: the user
+           * asked for sources, none were fetched, and the model answered
+           * anyway. Only this agent fails; the rest of the line-up still runs.
+           */
+          if (!engine || !searchKey) {
+            throw new Error(
+              `${target.label} cannot search the web, and Melon has no search provider set up to do it instead. ` +
+                `Add one in Settings → Web search, or turn search off for this agent.`
+            );
+          }
+          const query = trimQuery(req.userMessage);
+          const hits = await runWebSearch({
+            provider: engine.id,
+            apiKey: searchKey,
+            query,
+            signal: controller.signal,
+          });
+          searchContext = formatSearchContext(query, hits);
+          searchCitations = hits.map((h) => ({ url: h.url, title: h.title || undefined }));
+        }
+      }
+
       const result = await target.adapter.chat({
         model: agent.model,
         apiKey: agent.apiKey,
@@ -330,7 +378,8 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
           round === 0 ? req.attachments ?? [] : [],
           round === 0
             ? handoffPrompt(agent, req, priorThisRound)
-            : continuationPrompt(runningHistory, priorThisRound, agent.name)
+            : continuationPrompt(runningHistory, priorThisRound, agent.name),
+          searchContext
         ),
         maxOutputTokens: req.settings.maxOutputTokens,
         signal: controller.signal,
@@ -389,7 +438,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
         replyLimit: req.settings.maxOutputTokens,
         // Pages the model consulted, when it searched. Without these the
         // search is invisible: the answer is better but unverifiable.
-        citations: result.citations,
+        citations: result.citations ?? searchCitations,
         /*
          * Whether search was actually asked for. Reported separately from the
          * citations so the card can tell three different situations apart:

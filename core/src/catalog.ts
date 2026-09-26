@@ -464,7 +464,16 @@ export function browserBlockReason(def: ProviderDef): string | null {
  * Returns `null` when search is available and switchable. "always" providers
  * also return null but need no toggle; callers use `webSearchIsAutomatic`.
  */
-export function webSearchBlockReason(def: ProviderDef | undefined, model: string): string | null {
+export function webSearchBlockReason(
+  def: ProviderDef | undefined,
+  model: string,
+  /**
+   * True when a search provider and key are configured, which makes search
+   * available everywhere: Melon runs it and hands the results over. Nothing
+   * is blocked then, because the provider's own capability stops mattering.
+   */
+  melonSearch = false
+): string | null {
   if (!def) return "pick a provider first";
   switch (def.webSearch) {
     case "native":
@@ -472,10 +481,11 @@ export function webSearchBlockReason(def: ProviderDef | undefined, model: string
       return null;
     case "model-gated": {
       const ok = (def.webSearchModels ?? []).some((m) => model.toLowerCase().includes(m));
-      return ok ? null : `only ${def.label}'s search models can (try one ending "-search-preview")`;
+      if (ok) return null;
+      return melonSearch ? null : `only ${def.label}'s search models can (try one ending "-search-preview")`;
     }
     default:
-      return `${def.label} has no web search`;
+      return melonSearch ? null : `${def.label} cannot search — set one up in Settings → Web search and it can`;
   }
 }
 

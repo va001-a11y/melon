@@ -25,6 +25,8 @@ interface Props {
   setGroupPersonalities: (fn: (prev: Record<string, string>) => Record<string, string>) => void;
   globalPersonality: string;
   onGlobalPersonality: (v: string) => void;
+  /** Whether Melon-side web search is configured; AgentForm needs it. */
+  melonSearch: boolean;
   onOpenAnalytics: () => void;
   onOpenMarketplace: () => void;
   onRetryProviders: () => void;
@@ -45,6 +47,7 @@ export function Sidebar(props: Props) {
     agents,
     setAgents,
     providers,
+    melonSearch,
     chats,
     currentChatId,
     running,
@@ -375,6 +378,7 @@ export function Sidebar(props: Props) {
             providers={providers}
             editingName={editingId ? agents.find((a) => a.id === editingId)?.name ?? null : null}
             onSave={saveAgent}
+            melonSearch={melonSearch}
             onRetryProviders={onRetryProviders}
           />
         )}
