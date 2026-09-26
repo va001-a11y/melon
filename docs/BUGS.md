@@ -393,6 +393,41 @@ write speaker labels.
 
 ---
 
+### The fix for that truncation broke loading a 26B model
+
+`2026-09-26` - `num_ctx: 8192` stopped the silent truncation and immediately
+caused the opposite problem: gemma at 26B would no longer load at all. Ollama
+allocates the whole KV cache when the model loads, so `num_ctx` is not a
+limit, it is a **memory reservation made up front**. A fixed number cannot be
+right for both a 7B and a 26B model on the same machine, and a setting would
+only have moved the guessing onto the user.
+
+It is now sized to the conversation being sent: estimated prompt tokens, plus
+the reply budget, plus headroom, rounded up to a step. Steps rather than an
+exact figure because changing `num_ctx` forces Ollama to reload the model — a
+value that crept up every message would reload constantly, while crossing a
+step costs one reload.
+
+Two things keep it honest:
+
+- **The cap is the model's own context length**, read from `/api/show` and
+  cached, not guessed. The key is architecture-prefixed (`gemma3.
+  context_length`, `llama.context_length`), so it is matched by suffix. The
+  guard resolves the same number before it measures, so what the meter shows
+  and what the model got cannot drift.
+- **A conversation that genuinely does not fit fails with both numbers in the
+  message**, rather than being truncated into an answer that looks whole.
+
+If the machine still cannot find room, the adapter steps down once and
+retries — the smaller window was holding the same conversation anyway, since
+the step above it was headroom.
+
+**The lesson, which is not the one from yesterday:** a constant that fixes a
+correctness bug can create a resource bug. The right size was never a number
+to pick; it was a number to compute.
+
+---
+
 ### Ollama truncated silently while the guard reported headroom
 
 `2026-09-26` - found while investigating slow local replies, which turned out

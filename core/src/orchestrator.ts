@@ -20,6 +20,7 @@ import { stopController } from "./stop.js";
 import { HARD_AGENT_CAP } from "./registry.js";
 import { PROVIDERS, contextWindowFor, getProvider, supportsVision, webSearchBlockReason } from "./catalog.js";
 import { formatSearchContext, getSearchProvider, runWebSearch, trimQuery } from "./search.js";
+import { ollamaMaxContext } from "./providers/ollama.js";
 import type { Citation } from "./types.js";
 import { computeDynamicLimit, estimateTokens, tokenGuard } from "./guard.js";
 import { analytics } from "./analytics.js";
@@ -159,9 +160,26 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
     return;
   }
 
-  // ── Context window: the smallest active agent decides the ceiling ──
+  /*
+   * ── Context window: the smallest active agent decides the ceiling ──
+   *
+   * Ollama is asked rather than assumed. A local model's window is whatever
+   * the model was built with, which the catalog cannot know and which
+   * differs by an order of magnitude between models on the same machine.
+   * Asking costs one local request per model, cached thereafter, and it is
+   * the difference between a guard that reports the truth and one that
+   * reports 8,192 at a model that holds 128,000.
+   */
+  const localWindows = new Map<string, number>();
+  await Promise.all(
+    req.agents
+      .filter((a) => a.provider === "ollama")
+      .map(async (a) => {
+        localWindows.set(a.id, await ollamaMaxContext(a.baseUrl, a.model, controller.signal));
+      })
+  );
   const smallest = req.agents.reduce(
-    (min, a) => Math.min(min, contextWindowFor(a.provider)),
+    (min, a) => Math.min(min, localWindows.get(a.id) ?? contextWindowFor(a.provider)),
     Number.POSITIVE_INFINITY
   );
   // Leave headroom for the reply itself plus the system prompt.
