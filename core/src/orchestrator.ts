@@ -287,6 +287,33 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
     await sleep(waitMs, controller.signal);
   };
 
+  /*
+   * One search per run, shared by every agent that needs it.
+   *
+   * The query is the user's message, so four agents searching meant four
+   * identical requests: four times the quota off a free tier, and — worse —
+   * four possibly different sets of results, because search APIs do not
+   * return the same pages twice running. A panel arguing from different
+   * evidence looks like models disagreeing on facts when they were simply
+   * shown different pages, which is the opposite of what a relay is for.
+   *
+   * Memoised as the promise rather than the result, so agents answering
+   * simultaneously share one in-flight request instead of racing. A failure
+   * is shared too: if the search API is down or out of quota, retrying it
+   * once per agent would spend more quota to fail the same way.
+   */
+  let sharedSearch: Promise<{ context: string; citations: Citation[] }> | null = null;
+  const searchOnce = (engineId: string, apiKey: string) => {
+    if (!sharedSearch) {
+      const query = trimQuery(req.userMessage);
+      sharedSearch = runWebSearch({ provider: engineId, apiKey, query, signal: controller.signal }).then((hits) => ({
+        context: formatSearchContext(query, hits),
+        citations: hits.map((h) => ({ url: h.url, title: h.title || undefined })),
+      }));
+    }
+    return sharedSearch;
+  };
+
   const runAgent = async (agent: AgentSpec, round: number, priorThisRound: PriorTurn[]): Promise<void> => {
     sink.send("agent-start", { agentId: agent.id, round });
     analytics.recordStart(agent.provider, agent.model);
@@ -341,9 +368,11 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
        * When a search provider is configured, Melon runs the search and hands
        * the results over as material.
        *
+       * The search itself is shared across the run (see searchOnce): every
+       * agent reads the same pages, and the quota is spent once.
+       *
        * Round 0 only. Later rounds are agents talking to each other about
-       * what was already found, and re-searching each one would burn the
-       * user's quota to re-fetch the same pages.
+       * what was already found, and re-searching would buy nothing.
        */
       let searchContext = "";
       let searchCitations: Citation[] | undefined;
@@ -366,15 +395,9 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
                 `Add one in Settings → Web search, or turn search off for this agent.`
             );
           }
-          const query = trimQuery(req.userMessage);
-          const hits = await runWebSearch({
-            provider: engine.id,
-            apiKey: searchKey,
-            query,
-            signal: controller.signal,
-          });
-          searchContext = formatSearchContext(query, hits);
-          searchCitations = hits.map((h) => ({ url: h.url, title: h.title || undefined }));
+          const shared = await searchOnce(engine.id, searchKey);
+          searchContext = shared.context;
+          searchCitations = shared.citations;
         }
       }
 

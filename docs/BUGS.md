@@ -464,6 +464,34 @@ prime suspect on reasoning, and a stopwatch outranked the reasoning.
 
 ---
 
+### Every agent ran its own copy of the same search
+
+`2026-09-26` - introduced and fixed the same day, found by re-reading the
+code rather than by anyone hitting it.
+
+The Melon-side search sat inside the per-agent run, and the query is the
+user's message, so a four-agent panel made four identical requests. Measured
+before the fix: three agents, three calls.
+
+The quota cost is the obvious half - a free tier of 1,000 searches becomes
+250 questions. The real problem is the other half: search APIs do not return
+the same pages twice running, so the agents could be handed **different
+evidence for the same question**. A panel arguing from different sources
+reads as models disagreeing on facts, when they were simply shown different
+pages. For a relay whose whole point is agents building on each other, that
+is the worst possible way to fail.
+
+One search per run now, memoised as the promise rather than the result so
+that agents answering simultaneously share a single in-flight request instead
+of racing. A failure is shared too: if the search API is down or out of
+quota, retrying per agent would spend more quota to fail the same way.
+
+**Worth noting for next time:** the per-agent placement was natural, because
+that is where the agent's own capability is known. Anything derived only from
+the user's message belongs above the loop.
+
+---
+
 ### Search existed for five providers and nowhere else
 
 `2026-09-26` - a gap rather than a defect, but the same shape as the ones
