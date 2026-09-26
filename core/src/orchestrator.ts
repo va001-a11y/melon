@@ -12,6 +12,7 @@ import {
   buildSystemPrompt,
   COT_END,
   hasConcluded,
+  normaliseCitationMarkers,
   stripConclusion,
   stripSpeakerLabel,
 } from "./prompts.js";
@@ -19,7 +20,7 @@ import type { PriorTurn } from "./prompts.js";
 import { stopController } from "./stop.js";
 import { HARD_AGENT_CAP } from "./registry.js";
 import { PROVIDERS, contextWindowFor, getProvider, supportsVision, webSearchBlockReason } from "./catalog.js";
-import { formatSearchContext, getSearchProvider, runWebSearch, trimQuery } from "./search.js";
+import { formatSearchContext, getSearchProvider, runWebSearch, searchQueryFor } from "./search.js";
 import { ollamaMaxContext } from "./providers/ollama.js";
 import type { Citation } from "./types.js";
 import { computeDynamicLimit, estimateTokens, tokenGuard } from "./guard.js";
@@ -305,7 +306,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
   let sharedSearch: Promise<{ context: string; citations: Citation[] }> | null = null;
   const searchOnce = (engineId: string, apiKey: string) => {
     if (!sharedSearch) {
-      const query = trimQuery(req.userMessage);
+      const query = searchQueryFor(req.history, req.userMessage);
       sharedSearch = runWebSearch({ provider: engineId, apiKey, query, signal: controller.signal }).then((hits) => ({
         context: formatSearchContext(query, hits),
         citations: hits.map((h) => ({ url: h.url, title: h.title || undefined })),
@@ -467,8 +468,19 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
       // Drop a speaker label the model wrote itself. Left in, buildMessages
       // would re-label it next turn as "[Name]: [Name]: …" — and a teammate's
       // name would enter the history as though they had actually said it.
-      const answer = stripSpeakerLabel(stripConclusion(raw), req.agents.map((a) => a.name)).trim();
-      if (answer) priorThisRound.push({ agentName: agent.name, content: answer });
+      const answer = normaliseCitationMarkers(
+        stripSpeakerLabel(stripConclusion(raw), req.agents.map((a) => a.name))
+      ).trim();
+      if (answer) {
+        priorThisRound.push({
+          agentName: agent.name,
+          content: answer,
+          // Whatever this agent actually consulted, so the next one can see
+          // it — especially when the provider searched for itself and Melon
+          // could not share the search.
+          citations: result.citations ?? searchCitations,
+        });
+      }
       sink.send("agent-done", {
         agentId: agent.id,
         usage: result.usage,

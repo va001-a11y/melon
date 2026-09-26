@@ -464,6 +464,48 @@ prime suspect on reasoning, and a stopwatch outranked the reasoning.
 
 ---
 
+### A follow-up question searched for the wrong continent
+
+`2026-09-26` - found on the first live test of web search, with a real key.
+
+"What tragedy happened recently in Nepal?" returned AP, BBC and NBC. The
+follow-up, "Did the immigration building collapse?", was sent to the search
+API exactly as typed - no Nepal, no flood - and came back with *New York
+Building Collapse Scare* and *Midtown Manhattan buildings evacuated*,
+alongside Facebook and Instagram clips. The model then wrote confident,
+specific detail on top of that mixture, and gave 1,200 deaths where its own
+previous answer had said 1,300.
+
+The conversation knew the subject. The search did not. Melon now appends the
+previous question as context, current message first so that trimming drops
+the older context rather than what was just asked.
+
+**The limit, stated:** this helps a follow-up on the same subject and does
+nothing for one that changes subject mid-conversation. Having a model write
+the query would handle that, at the cost of an extra call before every
+search.
+
+**Worth sitting with:** this is the Nepal fabrication again, arriving through
+the feature built to prevent it. Sources make an answer *checkable*, not
+*correct*, and a plausible answer built on the wrong sources is harder to
+catch than one built on none - the citations make it look verified.
+
+### Models wrote their own citation markers into the prose
+
+`2026-09-26` - `gpt-oss-120b` cited its sources as `【1†L1-L4】`, mid-sentence,
+in finished text. It is the marker format OpenAI models are trained to emit
+for tool results; it was never meant to be displayed.
+
+Rewritten to `[1]` rather than removed, because the number identifies which
+of the listed sources the sentence came from - deleting it would throw away
+the citation while leaving the claim. Markers that parse to no number are
+dropped, and the space left before a full stop is closed up.
+
+Applied in the core, so saved history is clean, and again on the client's
+display path, so chats saved before the fix read correctly when reopened.
+
+---
+
 ### Every agent ran its own copy of the same search
 
 `2026-09-26` - introduced and fixed the same day, found by re-reading the

@@ -256,6 +256,21 @@ export function buildSystemPrompt(agent: AgentSpec, settings: RunSettings, teamN
 export interface PriorTurn {
   agentName: string;
   content: string;
+  /**
+   * What this agent cited, passed on so the next one can see it.
+   *
+   * Melon's own search is shared across a run, so those agents already work
+   * from identical pages. Provider-native search cannot be shared — Claude,
+   * Gemini and Perplexity each search inside their own reasoning, and Melon
+   * never sees the query. Two agents could therefore contradict each other
+   * because they read different pages, and neither would know.
+   *
+   * Titles and URLs, not the pages themselves: that is all a provider
+   * reports back. Enough for an agent to notice a teammate leaned on a
+   * social-media post, or that they are citing different outlets, and to say
+   * so instead of flatly disagreeing.
+   */
+  citations?: { url: string; title?: string }[];
 }
 
 /**
@@ -303,6 +318,26 @@ function escapeForRegex(literal: string): string {
  * agent publishing under a teammate's name — which is how a user ends up
  * reading a contribution from an agent that errored and never ran.
  */
+/**
+ * Turn a model's own citation markers into something a person can read.
+ *
+ * Handed numbered search results, models trained on OpenAI's tool format
+ * cite them as 【1†L1-L4】 — an internal marker naming a source and
+ * the lines used. It was never meant to be shown, and it appeared in the
+ * middle of finished prose.
+ *
+ * Rewritten to [1] rather than deleted: the number identifies which of the
+ * listed sources the sentence came from, which is the whole point of
+ * citing. Anything unparseable is dropped, since a stray marker reads as
+ * corruption.
+ */
+export function normaliseCitationMarkers(text: string): string {
+  return text
+    .replace(/【(\d+)[^】]*】/g, "[$1]")
+    .replace(/【[^】]*】/g, "")
+    .replace(/ +([.,;:!?])/g, "$1");
+}
+
 export function stripSpeakerLabel(text: string, agentNames: string[] = []): string {
   // Bracketed, any name.
   const bracketed = text.replace(/^\s*\[[^\]\n]{1,60}\]:[ \t]*/, "");
@@ -370,7 +405,18 @@ export function buildMessages(
   if (priorThisRound.length > 0) {
     messages.push({
       role: "assistant",
-      content: priorThisRound.map((p) => `[${p.agentName}]: ${p.content}`).join("\n\n"),
+      content: priorThisRound
+        .map((p) => {
+          const sources = (p.citations ?? [])
+            .map((c, i) => `  [${i + 1}] ${c.title || c.url} — ${c.url}`)
+            .join("\n");
+          // Named as theirs, so the reader treats them as a teammate's
+          // evidence to weigh rather than as their own research.
+          return sources
+            ? `[${p.agentName}]: ${p.content}\n\nSources ${p.agentName} used:\n${sources}`
+            : `[${p.agentName}]: ${p.content}`;
+        })
+        .join("\n\n"),
     });
     messages.push({ role: "user", content: followUp });
   }

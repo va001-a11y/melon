@@ -94,6 +94,8 @@ Set it up in **Settings → Web search**. It needs its own key, separate from yo
 | [Tavily](https://tavily.com) | 1,000 searches a month | Cleaned page text — better answers |
 | [Brave Search](https://brave.com/search/api/) | 2,000 searches a month | Short descriptions |
 
+**Agents see each other's sources.** In a relay, each agent is shown what its teammates cited, attributed to them by name. Melon's own search is shared across a run so those agents already read the same pages; provider-native search cannot be shared, since Claude, Gemini and Perplexity each search inside their own reasoning. Passing the source list on means an agent can say *"you used a social-media clip, I used Reuters"* instead of flatly contradicting a teammate for reasons neither of them can see.
+
 Providers that can search natively keep doing so; Melon's search is the fallback, and each agent's settings say which one it will use. If search is switched on and neither is available, that agent fails with a message rather than quietly answering from memory — an answer that looks researched and is not is worse than no answer.
 
 Search APIs are built server-to-server, so the hosted web build may be refused by CORS where the desktop build has no such limit. Melon reports what happened rather than guessing.

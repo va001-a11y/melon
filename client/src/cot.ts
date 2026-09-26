@@ -102,6 +102,20 @@ function dropProtocolNewline(text: string): string {
 }
 
 /**
+ * Rewrite a model's own citation markers as plain [1] references.
+ *
+ * Mirrors normaliseCitationMarkers in the core, applied here too so a chat
+ * saved before the core learned to strip them still reads correctly when
+ * it is reopened.
+ */
+function normaliseCitationMarkers(text: string): string {
+  return text
+    .replace(/\u3010(\d+)[^\u3011]*\u3011/g, "[$1]")
+    .replace(/\u3010[^\u3011]*\u3011/g, "")
+    .replace(/ +([.,;:!?])/g, "$1");
+}
+
+/**
  * Split a (possibly still-streaming) response into Detailed CoT and answer.
  *
  * A reply can hold MORE THAN ONE reasoning/answer pair. Continue appends the
@@ -144,10 +158,10 @@ export function splitCot(text: string, agentNames: string[] = []): SplitResult {
     rest = dropProtocolNewline(afterStart.slice(endIdx + COT_END.length));
   }
 
-  const answer = stripTrailingPartial(answers.join(""), COT_START).trim();
+  const answer = normaliseCitationMarkers(stripTrailingPartial(answers.join(""), COT_START)).trim();
 
   return {
-    cot: reasonings.map((r) => r.trim()).filter(Boolean).join("\n\n"),
+    cot: normaliseCitationMarkers(reasonings.map((r) => r.trim()).filter(Boolean).join("\n\n")),
     answer: stripSpeakerLabel(answer, agentNames),
     reasoningInProgress,
   };

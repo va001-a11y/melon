@@ -97,6 +97,29 @@ export function trimQuery(text: string, limit = 380): string {
   return (lastSpace > limit * 0.6 ? cut.slice(0, lastSpace) : cut).trim();
 }
 
+/**
+ * The query to search for, which is not simply the message just typed.
+ *
+ * "Did the immigration building collapse?" on its own returns a building
+ * collapse in Manhattan. The conversation knew it was about Nepal; the search
+ * did not, and the model then wrote confident detail from sources about the
+ * wrong continent — the exact failure the whole citation apparatus exists to
+ * prevent, arriving through the feature meant to fix it.
+ *
+ * So the previous question is appended as context. The current message comes
+ * first, because trimQuery cuts from the end: if anything is dropped it is
+ * the older context, never what was just asked.
+ *
+ * A deliberate limit: this helps a follow-up on the same subject and does
+ * nothing for one that changes subject mid-conversation. Having a model write
+ * the query would handle that, at the cost of an extra call before every
+ * search.
+ */
+export function searchQueryFor(history: { role: string; content: string }[], userMessage: string): string {
+  const prior = [...history].reverse().find((t) => t.role === "user")?.content?.trim();
+  return trimQuery(prior ? `${userMessage} ${prior}` : userMessage);
+}
+
 export async function runWebSearch(args: WebSearchArgs): Promise<SearchHit[]> {
   const query = trimQuery(args.query);
   if (!query) return [];
