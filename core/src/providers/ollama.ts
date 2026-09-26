@@ -2,6 +2,7 @@ import type { FinishReason, ProviderAdapter, ProviderChatArgs, ProviderResult } 
 import { describeNetworkError, fetchLocalAware, readStreamLines, throwHttpError } from "./sse.js";
 import { imageAttachments, inlineTextAttachments } from "./attachments.js";
 import { estimateTokens } from "../guard.js";
+import { COT_END, COT_START } from "../prompts.js";
 
 const DEFAULT_BASE = "http://127.0.0.1:11434";
 
@@ -175,6 +176,35 @@ export const ollama: ProviderAdapter = {
     let inputTokens = 0;
     let outputTokens = 0;
     let finishReason: FinishReason | undefined;
+
+    /*
+     * Reasoning models on Ollama answer in two channels: `thinking` and
+     * `content`. Reading only `content` — which is what this did — threw the
+     * reasoning away, and when the reply-length budget was spent thinking it
+     * left `content` empty, so the card showed a blank reply for a model that
+     * had worked perfectly. Measured on gemma4:26b: thirty tokens generated,
+     * nothing displayed.
+     *
+     * The thinking is wrapped in Melon's own CoT markers instead, so it lands
+     * in the reasoning drawer every other provider uses. Wrapped even when
+     * Detailed CoT is off: the drawer is collapsed by default, and silently
+     * discarding output the model produced is the bug, not the display.
+     */
+    let inThinking = false;
+    const openThinking = async () => {
+      if (inThinking) return;
+      inThinking = true;
+      const open = `${COT_START}\n`;
+      text += open;
+      await handlers.onToken(open);
+    };
+    const closeThinking = async () => {
+      if (!inThinking) return;
+      inThinking = false;
+      const close = `\n${COT_END}\n`;
+      text += close;
+      await handlers.onToken(close);
+    };
     for await (const line of readStreamLines(res.body!, "ndjson")) {
       let event: any;
       try {
@@ -190,12 +220,26 @@ export const ollama: ProviderAdapter = {
             : `Ollama: ${event.error}`
         );
       }
+      const thought = event.message?.thinking;
+      if (typeof thought === "string" && thought.length > 0) {
+        await openThinking();
+        text += thought;
+        await handlers.onToken(thought);
+      }
+
       const chunk = event.message?.content;
       if (typeof chunk === "string" && chunk.length > 0) {
+        // The answer starting is what ends the reasoning section.
+        await closeThinking();
         text += chunk;
         await handlers.onToken(chunk);
       }
+
       if (event.done) {
+        // Ran out of budget mid-thought: close the section anyway, so the
+        // drawer is readable rather than left open forever. The empty answer
+        // plus the "cut off early" note then says what happened.
+        await closeThinking();
         inputTokens = event.prompt_eval_count ?? 0;
         outputTokens = event.eval_count ?? 0;
         // Ollama reports "length" when num_predict cut the reply short.

@@ -521,6 +521,46 @@ exactly where one appears.
 
 ---
 
+### A reasoning model's whole reply went in the bin
+
+`2026-09-26` - reported as "Ollama ignores presets and Modes". It was not
+ignoring them.
+
+Reasoning models on Ollama answer in two channels: `message.thinking` and
+`message.content`. The adapter read only `content`. So the reasoning was
+discarded, and when the reply-length budget was spent thinking, `content`
+arrived empty and Melon rendered a **blank card** for a model that had worked
+correctly. Measured on gemma4:26b: thirty tokens generated, nothing shown.
+
+From the outside that is indistinguishable from a model ignoring its
+instructions, which is exactly how it was reported.
+
+**The first diagnosis was wrong and is worth recording.** `ollama show` gives
+gemma4 the template `{{ .Prompt }}` — no `.System` anywhere — so the obvious
+conclusion was that Ollama never passes the system prompt on. It does; it
+handles the system role itself regardless of the template. The experiment that
+settled it took one request: with `think: false` the same model answered
+`BANANA` to "What is 2+2?", having been told to. The instructions were always
+arriving and always being obeyed.
+
+Thinking is now wrapped in Melon's own `===REASONING===` markers as it
+streams, so it lands in the same drawer every other provider's reasoning uses,
+and a reply can no longer be empty when the model produced output. Wrapped
+even when Detailed CoT is off: the drawer is collapsed anyway, and throwing
+away what the model wrote is the defect — showing it is not.
+
+**The same fault was in the OpenAI adapter**, found by grepping for other
+instances rather than waiting for a second report. Reasoning models over that
+wire use a field beside the answer, and it is not standardised — DeepSeek
+sends `reasoning_content`, OpenRouter sends `reasoning` — and only `content`
+was read. That adapter speaks for a dozen services, so DeepSeek-R1 and QwQ
+anywhere would have lost their reasoning the same way. Both now read it.
+
+**The pattern, again:** output silently not arriving is as dangerous as input
+silently not arriving. Pattern 1 has a mirror image.
+
+---
+
 ## Testing notes that cost time to learn
 
 - **A `window.fetch` recorder does not see** dynamic `import()` or Worker

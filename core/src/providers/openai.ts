@@ -2,6 +2,7 @@ import type { FinishReason, ProviderAdapter, ProviderChatArgs, ProviderResult } 
 import { CitationCollector } from "./citations.js";
 import { describeNetworkError, fetchLocalAware, readStreamLines, throwHttpError } from "./sse.js";
 import { imageAttachments, inlineTextAttachments } from "./attachments.js";
+import { COT_END, COT_START } from "../prompts.js";
 
 /**
  * The OpenAI /chat/completions protocol — spoken by OpenAI itself and by
@@ -103,6 +104,35 @@ export const openai: ProviderAdapter = {
     let outputTokens = 0;
     let finishReason: FinishReason | undefined;
     const sources = new CitationCollector();
+
+    /*
+     * Reasoning models stream their thinking in a field beside the answer,
+     * and the field is not standardised: DeepSeek calls it
+     * `reasoning_content`, OpenRouter calls it `reasoning`. Reading only
+     * `content` — as this did — discards it, and a model that spends its
+     * whole token budget reasoning then returns an empty `content`, which
+     * Melon rendered as a blank card. Exactly the fault found on Ollama, in
+     * the adapter that speaks for a dozen more services.
+     *
+     * Wrapped in Melon's own CoT markers, so it reaches the same reasoning
+     * drawer everything else uses.
+     */
+    let inThinking = false;
+    const openThinking = async () => {
+      if (inThinking) return;
+      inThinking = true;
+      const open = `${COT_START}\n`;
+      text += open;
+      await handlers.onToken(open);
+    };
+    const closeThinking = async () => {
+      if (!inThinking) return;
+      inThinking = false;
+      const close = `\n${COT_END}\n`;
+      text += close;
+      await handlers.onToken(close);
+    };
+
     for await (const data of readStreamLines(res.body!, "sse")) {
       if (data === "[DONE]") break;
       let event: any;
@@ -123,8 +153,18 @@ export const openai: ProviderAdapter = {
         }
         throw new Error(`${label}: ${detail}`);
       }
-      const delta = event.choices?.[0]?.delta?.content;
+      const d = event.choices?.[0]?.delta;
+      const thought = d?.reasoning_content ?? d?.reasoning;
+      if (typeof thought === "string" && thought.length > 0) {
+        await openThinking();
+        text += thought;
+        await handlers.onToken(thought);
+      }
+
+      const delta = d?.content;
       if (typeof delta === "string" && delta.length > 0) {
+        // The answer beginning is what ends the reasoning section.
+        await closeThinking();
         text += delta;
         await handlers.onToken(delta);
       }
@@ -157,6 +197,11 @@ export const openai: ProviderAdapter = {
         outputTokens = event.usage.completion_tokens ?? outputTokens;
       }
     }
+
+    // Ran out of budget mid-thought, or the stream ended inside the reasoning
+    // section: close it so the drawer is readable rather than left open.
+    await closeThinking();
+
     return { text, usage: { inputTokens, outputTokens }, finishReason, citations: sources.list() };
   },
 };
