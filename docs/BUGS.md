@@ -464,6 +464,33 @@ prime suspect on reasoning, and a stopwatch outranked the reasoning.
 
 ---
 
+### The sources list claimed more checking than happened
+
+`2026-09-26` - the same screenshot as the entry below, but a different fault,
+and this one was mine rather than the model's.
+
+The reply cited three of the five results. The card said **5 sources**, and
+listed the two about a building collapse in Manhattan. Melon attached every
+hit the search returned, whether or not the answer rested on any of it.
+
+The model had done the right thing. The search block already tells it to use
+the results "where they are relevant" and to say plainly when they do not
+answer the question, and it obeyed: sources 3 and 4 appear nowhere in the
+prose. Strengthening that instruction would have changed nothing.
+
+Only the sources actually cited are listed now, renumbered so a `[3]` in the
+prose still points at the third entry on screen. Everything is kept when the
+answer cites nothing, since many models never write a marker and showing no
+sources would be worse than showing too many. Provider-native citations are
+never pruned: those are the provider's own account of what it read, and
+pruning them against markers the model never wrote would delete all of them.
+
+**The general point:** citations exist to show what an answer rests on. An
+unread page is not a source, and listing it implies a breadth of checking
+that did not happen.
+
+---
+
 ### A follow-up question searched for the wrong continent
 
 `2026-09-26` - found on the first live test of web search, with a real key.

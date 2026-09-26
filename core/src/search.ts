@@ -185,6 +185,50 @@ async function searchHttpError(res: Response, label: string): Promise<Error> {
 }
 
 /**
+ * List only the sources the answer actually used.
+ *
+ * Melon attached every hit the search returned, so a reply resting on three
+ * of five advertised five. Two of them, in the case that exposed this, were
+ * about a building collapse in Manhattan when the question was about Nepal.
+ *
+ * The model was not at fault: told to use the results where relevant, it
+ * cited three and ignored the other two. Listing the ignored ones anyway
+ * implies a breadth of checking that did not happen, and citations exist to
+ * show what an answer rests on. An unread page is not a source.
+ *
+ * Renumbers as it prunes, so [5] in the prose still points at the fifth entry
+ * of the list the reader is looking at. One pass through replace(), because
+ * rewriting numbers one at a time would rewrite its own output.
+ *
+ * Returns everything unchanged when the answer cites nothing — many models
+ * never write a marker, and showing no sources at all would be worse than
+ * showing too many.
+ */
+export function pruneUnusedSources(
+  answer: string,
+  citations: { url: string; title?: string }[]
+): { answer: string; citations: { url: string; title?: string }[] } {
+  if (citations.length === 0) return { answer, citations };
+
+  const cited = new Set<number>();
+  for (const m of answer.matchAll(/\[(\d+)\]/g)) {
+    const n = Number(m[1]);
+    if (n >= 1 && n <= citations.length) cited.add(n);
+  }
+  if (cited.size === 0) return { answer, citations };
+
+  const keep = [...cited].sort((a, b) => a - b);
+  const renumber = new Map(keep.map((old, i) => [old, i + 1]));
+  return {
+    answer: answer.replace(/\[(\d+)\]/g, (whole, digits) => {
+      const next = renumber.get(Number(digits));
+      return next ? `[${next}]` : whole;
+    }),
+    citations: keep.map((n) => citations[n - 1]),
+  };
+}
+
+/**
  * Turn hits into the block the model reads.
  *
  * Numbered, because the model is asked to cite by number, and labelled as

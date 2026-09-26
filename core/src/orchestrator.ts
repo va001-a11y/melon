@@ -20,7 +20,13 @@ import type { PriorTurn } from "./prompts.js";
 import { stopController } from "./stop.js";
 import { HARD_AGENT_CAP } from "./registry.js";
 import { PROVIDERS, contextWindowFor, getProvider, supportsVision, webSearchBlockReason } from "./catalog.js";
-import { formatSearchContext, getSearchProvider, runWebSearch, searchQueryFor } from "./search.js";
+import {
+  formatSearchContext,
+  getSearchProvider,
+  pruneUnusedSources,
+  runWebSearch,
+  searchQueryFor,
+} from "./search.js";
 import { ollamaMaxContext } from "./providers/ollama.js";
 import type { Citation } from "./types.js";
 import { computeDynamicLimit, estimateTokens, tokenGuard } from "./guard.js";
@@ -468,9 +474,24 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
       // Drop a speaker label the model wrote itself. Left in, buildMessages
       // would re-label it next turn as "[Name]: [Name]: …" — and a teammate's
       // name would enter the history as though they had actually said it.
-      const answer = normaliseCitationMarkers(
+      let answer = normaliseCitationMarkers(
         stripSpeakerLabel(stripConclusion(raw), req.agents.map((a) => a.name))
       ).trim();
+
+      /*
+       * Report the sources the answer used, not everything the search found.
+       *
+       * Only for Melon's own search, where the numbering in the prose is the
+       * numbering Melon handed over. A provider's native citations are its
+       * own account of what it read, and pruning those against markers the
+       * model never wrote would delete the lot.
+       */
+      let citations = result.citations;
+      if (!citations && searchCitations) {
+        const pruned = pruneUnusedSources(answer, searchCitations);
+        answer = pruned.answer;
+        citations = pruned.citations;
+      }
       if (answer) {
         priorThisRound.push({
           agentName: agent.name,
@@ -478,7 +499,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
           // Whatever this agent actually consulted, so the next one can see
           // it — especially when the provider searched for itself and Melon
           // could not share the search.
-          citations: result.citations ?? searchCitations,
+          citations,
         });
       }
       sink.send("agent-done", {
@@ -491,7 +512,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
         replyLimit: req.settings.maxOutputTokens,
         // Pages the model consulted, when it searched. Without these the
         // search is invisible: the answer is better but unverifiable.
-        citations: result.citations ?? searchCitations,
+        citations,
         /*
          * Whether search was actually asked for. Reported separately from the
          * citations so the card can tell three different situations apart:
