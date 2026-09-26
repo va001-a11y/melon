@@ -460,6 +460,32 @@ feature is what puts open-web text into the prompt.
 
 ---
 
+### The context menu was sliced off mid-word on narrow screens
+
+`2026-09-26` - right-clicking an agent on a phone-width layout produced a menu
+pushed off to the right with every label cut off: "Turn", "Mov", "Dupl",
+"Rem".
+
+`.context-menu` is `position: fixed`, and its coordinates are calculated
+against `window.innerWidth`. That is correct everywhere except inside the
+narrow-layout sidebar, which is a drawer: `transform: translateX(...)` to
+slide in, `overflow-y: auto` to scroll. **A transformed ancestor becomes the
+containing block for `position: fixed` descendants**, so the menu was placed
+relative to the drawer while being measured against the viewport - and then
+clipped at the drawer's 320px edge, because `overflow-y: auto` clips the other
+axis too.
+
+Rendered into `document.body` through a portal, which escapes both the
+transform and the clip, and changes nothing on desktop where the sidebar has
+neither.
+
+**Worth remembering:** `position: fixed` is only viewport-relative until some
+ancestor has `transform`, `filter`, `backdrop-filter`, `will-change` or
+`contain`. Any of those silently redefines it, and a responsive drawer is
+exactly where one appears.
+
+---
+
 ## Testing notes that cost time to learn
 
 - **A `window.fetch` recorder does not see** dynamic `import()` or Worker

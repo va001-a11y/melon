@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 
 export interface MenuItem {
   label: string;
@@ -45,7 +46,18 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
   const left = Math.max(8, Math.min(x, window.innerWidth - 190));
   const top = Math.max(8, Math.min(y, window.innerHeight - items.length * 32 - 16));
 
-  return (
+  /*
+   * Rendered into <body>, not where it is used.
+   *
+   * The narrow-layout sidebar is a drawer: `transform: translateX(...)` to
+   * slide, `overflow-y: auto` to scroll. A transformed ancestor becomes the
+   * containing block for `position: fixed`, so a menu left inside the drawer
+   * was positioned against the drawer while its coordinates were measured
+   * against the viewport — then clipped at the drawer's 320px edge, cutting
+   * every label off mid-word. A portal escapes both the transform and the
+   * clip, and costs nothing on desktop where neither applies.
+   */
+  return createPortal(
     <div className="context-menu" style={{ left, top }} ref={ref} role="menu">
       {items.map((item) => (
         <button
@@ -60,6 +72,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
           {item.label}
         </button>
       ))}
-    </div>
+    </div>,
+    document.body
   );
 }
