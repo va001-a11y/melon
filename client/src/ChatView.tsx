@@ -31,6 +31,11 @@ interface Props {
   paceLimit: number;
   formatReplies: boolean;
   onRerun: (blockId: string, agentId: string, mode: "retry" | "regenerate" | "continue") => void;
+  /**
+   * Replace a question you already asked and run it again. Everything after
+   * it goes, because those replies answered the old wording.
+   */
+  onEditUser: (messageId: string, text: string) => void;
   /** Copy this chat up to and including a block into a new chat. */
   onBranch: (blockId: string) => void;
 }
@@ -70,6 +75,112 @@ function BranchButton({ onBranch, busy }: { onBranch: () => void; busy: boolean 
     >
       ⑂ Branch from here
     </button>
+  );
+}
+
+/**
+ * A question you asked, which you can ask differently.
+ *
+ * Editing re-runs from this point and drops what came after: those replies
+ * answered wording that no longer exists, and keeping them would make the
+ * conversation read as though the models had answered a question nobody
+ * asked. Branch sits right next to it for anyone who wants both versions,
+ * which is why this does not stop to confirm.
+ */
+function UserBubble({
+  message,
+  running,
+  activeCount,
+  onBranch,
+  onEdit,
+}: {
+  message: Extract<Message, { kind: "user" }>;
+  running: boolean;
+  /** Re-asking runs the question, so it needs someone switched on to answer. */
+  activeCount: number;
+  onBranch: () => void;
+  onEdit: (text: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(message.text);
+  const boxRef = useRef<HTMLTextAreaElement>(null);
+
+  // Open on what is actually there, however many times it is reopened.
+  useEffect(() => {
+    if (!editing) return;
+    setDraft(message.text);
+    const box = boxRef.current;
+    if (box) {
+      box.focus();
+      box.setSelectionRange(box.value.length, box.value.length);
+    }
+  }, [editing, message.text]);
+
+  const commit = () => {
+    const next = draft.trim();
+    if (!next) return;
+    setEditing(false);
+    onEdit(next);
+  };
+
+  if (editing) {
+    return (
+      <div className="user-msg user-msg-editing">
+        <textarea
+          ref={boxRef}
+          value={draft}
+          rows={Math.min(10, draft.split("\n").length + 1)}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              commit();
+            }
+            if (e.key === "Escape") setEditing(false);
+          }}
+        />
+        <div className="edit-actions">
+          <button
+            className="small-btn primary"
+            onClick={commit}
+            disabled={!draft.trim() || running || activeCount === 0}
+            title={activeCount === 0 ? "Switch an agent on first — there is nobody to answer" : undefined}
+          >
+            Ask again
+          </button>
+          <button className="small-btn" onClick={() => setEditing(false)}>
+            Cancel
+          </button>
+          <small>Replies below are replaced. Branch first to keep them.</small>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="user-msg">
+      {message.text}
+      {message.attachments && message.attachments.length > 0 && (
+        <div className="msg-files">
+          {message.attachments.map((a) => (
+            <span key={a.name} className="msg-file">
+              {a.kind === "image" ? "🖼" : "📄"} {a.name}
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="msg-actions">
+        <button
+          className="branch-btn"
+          onClick={() => setEditing(true)}
+          disabled={running}
+          title={running ? "Wait for the current run to finish" : "Edit this question and ask it again"}
+        >
+          Edit
+        </button>
+        <BranchButton onBranch={onBranch} busy={running} />
+      </div>
+    </div>
   );
 }
 
@@ -367,6 +478,7 @@ function AgentCard({
 
 export function ChatView({
   messages,
+  onEditUser,
   activeCount,
   recommendedMax,
   hardCap,
@@ -515,19 +627,14 @@ export function ChatView({
         )}
         {messages.map((m) =>
           m.kind === "user" ? (
-            <div key={m.id} className="user-msg">
-              {m.text}
-              {m.attachments && m.attachments.length > 0 && (
-                <div className="msg-files">
-                  {m.attachments.map((a) => (
-                    <span key={a.name} className="msg-file">
-                      {a.kind === "image" ? "🖼" : "📄"} {a.name}
-                    </span>
-                  ))}
-                </div>
-              )}
-              <BranchButton onBranch={() => onBranch(m.id)} busy={running} />
-            </div>
+            <UserBubble
+              key={m.id}
+              message={m}
+              running={running}
+              activeCount={activeCount}
+              onBranch={() => onBranch(m.id)}
+              onEdit={(text) => onEditUser(m.id, text)}
+            />
           ) : (
             // Teams are read off the stored replies, so a reopened chat is
             // labelled exactly the way it actually ran.

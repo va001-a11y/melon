@@ -2689,6 +2689,50 @@ body {
  * One per block, so it stays out of the way until the row is hovered. On
  * touch, where there is no hover, it is always visible instead.
  */
+/* Edit and Branch sit on one row under a question, both revealed on hover. */
+.msg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+/*
+ * The editing state keeps the bubble's own colours and corner so the message
+ * does not jump when it becomes writable — it is the same message, now
+ * editable, rather than a new control that has appeared.
+ */
+.user-msg-editing {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: min(520px, 70vw);
+}
+
+.user-msg-editing textarea {
+  width: 100%;
+  resize: vertical;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  font-weight: 400;
+}
+
+.edit-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.edit-actions small {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
 .branch-btn {
   display: block;
   margin-top: 6px;
@@ -2705,6 +2749,7 @@ body {
 }
 
 .user-msg:hover .branch-btn,
+.user-msg:focus-within .branch-btn,
 .run-block:hover .branch-btn,
 .branch-btn:focus-visible {
   opacity: 1;

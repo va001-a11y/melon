@@ -231,6 +231,19 @@ function chatTitle(messages: Message[]): string {
   return firstUser && firstUser.kind === "user" ? firstUser.text.slice(0, 42) : "New chat";
 }
 
+/**
+ * Rough size of a conversation, for the pre-run cost estimate. Taken of a
+ * given list rather than the live one, so an edited question can be costed
+ * against the history it will actually run with.
+ */
+function charsOf(list: Message[]): number {
+  return list.reduce(
+    (n, m) =>
+      n + (m.kind === "user" ? m.text.length : Object.values(m.responses).reduce((k, r) => k + r.text.length, 0)),
+    0
+  );
+}
+
 export default function App() {
   const [agents, setAgents] = useState<Agent[]>(() => loadList("melon.agents", normaliseAgent));
   const [settings, setSettings] = useState<Settings>(() => ({
@@ -366,21 +379,25 @@ export default function App() {
 
   const buildHistory = useCallback((): HistoryTurn[] => buildHistoryFrom(messages), [messages, buildHistoryFrom]);
 
-  const historyChars = useMemo(
-    () =>
-      messages.reduce(
-        (n, m) => n + (m.kind === "user" ? m.text.length : Object.values(m.responses).reduce((k, r) => k + r.text.length, 0)),
-        0
-      ),
-    [messages]
-  );
+  const historyChars = useMemo(() => charsOf(messages), [messages]);
 
   const send = useCallback(
-    async (text: string, attachments: Attachment[] = []) => {
+    async (
+      text: string,
+      attachments: Attachment[] = [],
+      /**
+       * Conversation to build on, when it is not the current one. Editing an
+       * earlier question re-runs from a truncated history, and passing it
+       * explicitly avoids depending on a setMessages that has not applied
+       * yet — React state is not readable the statement after you set it.
+       */
+      base?: Message[]
+    ) => {
       if (runningRef.current || activeAgents.length === 0) return;
+      const priorMessages = base ?? messages;
 
       // Preflight cost gate: expensive runs need explicit confirmation.
-      const est = estimateRun(activeAgents, settings, historyChars, text.length);
+      const est = estimateRun(activeAgents, settings, base ? charsOf(base) : historyChars, text.length);
       if (est.usd >= COST_CONFIRM_THRESHOLD) {
         const ok = window.confirm(
           `This run is estimated to cost about ${formatUsd(est.usd)} ` +
@@ -395,7 +412,7 @@ export default function App() {
       setBanner(null);
       setConcluded(false);
 
-      const history = buildHistory();
+      const history = buildHistoryFrom(priorMessages);
 
       // Switching tone partway through only sticks if the models are told;
       // the earlier replies in the history otherwise keep setting the style.
@@ -432,7 +449,7 @@ export default function App() {
       const roundIds: string[] = [];
       const first = blankRound(0);
       roundIds.push(first.id);
-      setMessages((prev) => [...prev, { id: makeId(), kind: "user", text, attachments }, first]);
+      setMessages((prev) => [...(base ?? prev), { id: makeId(), kind: "user", text, attachments }, first]);
 
       /** Events carry a round index; apply them to that round's block. */
       const at = (round: number | undefined) => roundIds[round ?? 0] ?? roundIds[roundIds.length - 1];
@@ -683,6 +700,27 @@ export default function App() {
    * Branches are titled from the original with an arrow, so the sidebar shows
    * where a chat came from without needing a tree view.
    */
+  /**
+   * Re-ask a question, reworded.
+   *
+   * The edited message and everything after it is dropped, and `send` is
+   * given the remaining history explicitly — the truncation and the run have
+   * to agree, and reading `messages` back after setMessages would read the
+   * old value. Attachments come along, since re-wording a question about a
+   * file should not silently detach the file.
+   */
+  const editUserMessage = useCallback(
+    (messageId: string, text: string) => {
+      if (runningRef.current) return;
+      const index = messages.findIndex((m) => m.id === messageId);
+      if (index < 0) return;
+      const original = messages[index];
+      const attachments = original.kind === "user" ? original.attachments ?? [] : [];
+      void send(text, attachments, messages.slice(0, index));
+    },
+    [messages, send]
+  );
+
   const branchFrom = useCallback(
     (blockId: string) => {
       if (runningRef.current) return;
@@ -910,6 +948,7 @@ export default function App() {
           formatReplies={settings.formatReplies}
           onRerun={(blockId, agentId, mode) => void rerunAgent(blockId, agentId, mode)}
           onBranch={branchFrom}
+          onEditUser={editUserMessage}
         />
       </div>
 
