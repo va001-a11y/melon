@@ -1,6 +1,7 @@
 import type { FinishReason, ProviderAdapter, ProviderChatArgs, ProviderResult } from "../types.js";
 import { describeNetworkError, fetchLocalAware, readStreamLines, throwHttpError } from "./sse.js";
 import { imageAttachments, inlineTextAttachments } from "./attachments.js";
+import { OLLAMA_NUM_CTX } from "../catalog.js";
 
 const DEFAULT_BASE = "http://127.0.0.1:11434";
 
@@ -24,7 +25,16 @@ export const ollama: ProviderAdapter = {
         body: JSON.stringify({
           model,
           stream: true,
-          options: { num_predict: maxOutputTokens },
+          // Ollama unloads a model after five idle minutes, and the next
+          // request then pays a full reload before its first token. Holding
+          // it for half an hour costs memory Melon is already using.
+          keep_alive: "30m",
+          // num_ctx is not optional here. Left unset, Ollama uses 4096 and
+          // TRUNCATES anything longer without a word — no error, no warning,
+          // just a model that stops seeing the start of the conversation.
+          // The same constant is declared in the catalog, so Melon's context
+          // guard is measuring against the window the model actually got.
+          options: { num_predict: maxOutputTokens, num_ctx: OLLAMA_NUM_CTX },
           messages: [
             { role: "system", content: system },
             // Ollama takes images as a parallel array of base64 strings.

@@ -393,6 +393,42 @@ write speaker labels.
 
 ---
 
+### Ollama truncated silently while the guard reported headroom
+
+`2026-09-26` - found while investigating slow local replies, which turned out
+not to be a bug at all. The Ollama entry declared no `contextWindow`, so it
+fell back to the 128,000 default, and the adapter never sent `num_ctx`. Ollama
+defaults to 4096 and does not reject an oversized prompt - it truncates and
+says nothing. A long local chat therefore lost the start of the conversation,
+system prompt included, while Melon's guard showed plenty of room.
+
+The default errs high on purpose, and the reasoning is sound: a hosted
+provider rejects an oversized request and reports the real limit, so guessing
+high is recoverable while guessing low blocks legitimate work. That argument
+depends on the provider *complaining*. Ollama does not, which is what made it
+the exception.
+
+Both sides now come from one exported constant, `OLLAMA_NUM_CTX`, sent with
+every request and declared in the catalog, so the guard cannot drift from the
+window the model was actually given. `keep_alive: "30m"` went in alongside it,
+which only helps a model that has gone idle.
+
+**Pattern 1 and pattern 2 at once:** input silently not arriving, because a
+catalog field was declared and never sent.
+
+### Not a bug: local replies are slow because CoT doubles them
+
+Measured on the same machine: bare `ollama run` 9.9s, Melon with Detailed CoT
+off 8s, Melon with it on 14s. Melon is not slower than the CLI - it was faster,
+the model already being resident. Detailed CoT makes the model write a
+reasoning summary *and* an answer, so it generates roughly twice the tokens,
+and locally every token is wall-clock time.
+
+Recorded because the first diagnosis was wrong. `keep_alive` was ranked the
+prime suspect on reasoning, and a stopwatch outranked the reasoning.
+
+---
+
 ## Testing notes that cost time to learn
 
 - **A `window.fetch` recorder does not see** dynamic `import()` or Worker

@@ -93,6 +93,21 @@ export interface ProviderDef {
  */
 const DEFAULT_CONTEXT_WINDOW = 128000;
 
+/**
+ * Ollama is the exception to the rule above, because the reasoning behind it
+ * does not hold locally. Erring high is safe with a hosted provider: it
+ * rejects an oversized request and says what the real limit is. Ollama does
+ * not reject. It truncates, silently, at whatever `num_ctx` is set to —
+ * 4096 by default — so Melon would report plenty of headroom while the model
+ * quietly stopped seeing the start of the conversation.
+ *
+ * So Melon sends this value with every Ollama request AND declares it here.
+ * One constant, used on both sides: the guard cannot drift from the context
+ * the model was actually given. 8192 doubles Ollama's default at negligible
+ * cost in memory; raising it means changing this one number.
+ */
+export const OLLAMA_NUM_CTX = 8192;
+
 export function contextWindowFor(providerId: string): number {
   return getProvider(providerId)?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
 }
@@ -361,6 +376,7 @@ export const PROVIDERS: ProviderDef[] = [
     protocol: "ollama",
     baseUrl: "http://127.0.0.1:11434",
     needsKey: false,
+    contextWindow: OLLAMA_NUM_CTX,
     editableBaseUrl: true,
     browser: "local-only",
     group: "Local",
