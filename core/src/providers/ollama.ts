@@ -52,14 +52,26 @@ function rootOf(baseUrl: string | undefined): string {
  * Cached: it cannot change while a model file sits on disk, and the guard
  * asks for the same answer the adapter does.
  */
-const maxContextCache = new Map<string, number>();
+export interface OllamaModelInfo {
+  /** Largest context the model was built for. */
+  contextLength: number;
+  /** Whether it has a thinking mode that can be switched off. */
+  canThink: boolean;
+}
 
-export async function ollamaMaxContext(baseUrl: string | undefined, model: string, signal?: AbortSignal): Promise<number> {
+const modelInfoCache = new Map<string, OllamaModelInfo>();
+
+export async function ollamaModelInfo(
+  baseUrl: string | undefined,
+  model: string,
+  signal?: AbortSignal
+): Promise<OllamaModelInfo> {
   const root = rootOf(baseUrl);
   const cacheKey = `${root}::${model}`;
-  const cached = maxContextCache.get(cacheKey);
+  const cached = modelInfoCache.get(cacheKey);
   if (cached) return cached;
 
+  const fallback: OllamaModelInfo = { contextLength: CTX_FALLBACK, canThink: false };
   try {
     const res = await fetch(`${root}/api/show`, {
       method: "POST",
@@ -70,18 +82,34 @@ export async function ollamaMaxContext(baseUrl: string | undefined, model: strin
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ model }),
     });
-    if (!res.ok) return CTX_FALLBACK;
+    if (!res.ok) return fallback;
     const data: any = await res.json();
     const info = data?.model_info ?? {};
     const key = Object.keys(info).find((k) => k.endsWith(".context_length"));
     const max = key ? Number(info[key]) : NaN;
-    if (!Number.isFinite(max) || max < 1024) return CTX_FALLBACK;
-    maxContextCache.set(cacheKey, max);
-    return max;
+    const resolved: OllamaModelInfo = {
+      contextLength: Number.isFinite(max) && max >= 1024 ? max : CTX_FALLBACK,
+      // Ollama lists what the model can do. Asked for on the same request
+      // that fetches the context length, so knowing this is free — and it
+      // means `think` is only ever sent to a model that has a thinking mode,
+      // rather than hoping every other model ignores an unknown field.
+      canThink: Array.isArray(data?.capabilities) && data.capabilities.includes("thinking"),
+    };
+    modelInfoCache.set(cacheKey, resolved);
+    return resolved;
   } catch {
     // Ollama not running, or too old to report it. The caller still works.
-    return CTX_FALLBACK;
+    return fallback;
   }
+}
+
+/** Convenience for the context guard, which needs only the window. */
+export async function ollamaMaxContext(
+  baseUrl: string | undefined,
+  model: string,
+  signal?: AbortSignal
+): Promise<number> {
+  return (await ollamaModelInfo(baseUrl, model, signal)).contextLength;
 }
 
 
@@ -106,7 +134,8 @@ export const ollama: ProviderAdapter = {
     const imageCount = messages.reduce((n, m) => n + imageAttachments(m).length, 0);
     const needed = estimateTokens(promptChars) + imageCount * 800 + maxOutputTokens + CTX_HEADROOM;
 
-    const modelMax = await ollamaMaxContext(baseUrl, model, signal);
+    const info = await ollamaModelInfo(baseUrl, model, signal);
+    const modelMax = info.contextLength;
     if (needed > modelMax) {
       throw new Error(
         `This conversation needs about ${needed.toLocaleString()} tokens of context, but ${model} tops out at ` +
@@ -128,6 +157,18 @@ export const ollama: ProviderAdapter = {
             // request then pays a full reload before its first token.
             // Holding it for half an hour costs memory Melon is using anyway.
             keep_alive: "30m",
+            /*
+             * "Show reasoning" off means do not reason, where that can be
+             * asked for. A reasoning model thinks regardless otherwise, and
+             * the user waits through it with nothing on screen — measured at
+             * 197 seconds on gemma4:26b, with the toggle off.
+             *
+             * Only sent to models that report a thinking capability, so a
+             * plain model is never handed a field it has no opinion about.
+             * Left alone when reasoning is switched on: that is the model
+             * doing what the user asked for.
+             */
+            ...(info.canThink && args.detailedCoT === false ? { think: false } : {}),
             // num_ctx is not optional. Left unset, Ollama uses 4096 and
             // TRUNCATES anything longer without a word — no error, no
             // warning, just a model that stops seeing the start of the

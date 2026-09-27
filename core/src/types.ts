@@ -160,6 +160,12 @@ export interface ProviderChatArgs {
    * to know which one it is actually talking to.
    */
   providerId?: string;
+  /**
+   * Whether the user asked to see reasoning. Providers that can be told not
+   * to think are told, which is the difference between an answer and three
+   * minutes of silence on a local model.
+   */
+  detailedCoT?: boolean;
   /** Ask the provider to search the web before answering. */
   webSearch?: boolean;
   system: string;

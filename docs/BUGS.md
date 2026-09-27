@@ -660,6 +660,34 @@ silently not arriving. Pattern 1 has a mirror image.
 
 ## After v0.3.0 (2026-09-27)
 
+### "Show reasoning" was off and the model reasoned for seven minutes
+
+`2026-09-27` - with the toggle off, gemma4:26b sat at `writing... 439s` on the
+word "hi", working out how to greet someone.
+
+Melon captures a reasoning model's thinking whether or not the toggle is on,
+which is deliberate: discarding it produced blank cards when the reply budget
+went on thinking. But capturing it was only ever half an answer. "Show
+reasoning" means *ask models to explain themselves*, and when it is off and
+the provider can be told not to think, Melon should tell it.
+
+Ollama takes `think: false`, and reports per model whether there is a thinking
+mode to switch off - `capabilities: ["completion", "vision", "tools",
+"thinking"]` - on the same `/api/show` call that already fetches the context
+length, so knowing costs nothing. The field is sent only to models that list
+the capability, rather than trusting every other model to ignore an unknown
+field.
+
+The OpenAI-compatible wire has no equivalent switch, so reasoning models there
+still think and Melon still shows it. Better a visible explanation than a
+blank card.
+
+**Both halves were needed.** Capturing the thinking stopped blank replies;
+suppressing it stops the wait that produced them. Neither is sufficient alone,
+which is easy to miss when the first fix makes the symptom look solved.
+
+---
+
 ### v0.3.0 shipped broken for every local model
 
 `2026-09-27` - reported within hours of release: any conversation with an
