@@ -946,6 +946,7 @@ export default function App() {
           pacing={pacing}
           paceLimit={settings.tokensPerMinute}
           formatReplies={settings.formatReplies}
+          detailedCoT={settings.detailedCoT}
           onRerun={(blockId, agentId, mode) => void rerunAgent(blockId, agentId, mode)}
           onBranch={branchFrom}
           onEditUser={editUserMessage}

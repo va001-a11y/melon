@@ -122,6 +122,7 @@ export function Sidebar(props: Props) {
     [agents, providers, melonSearch]
   );
   const allSearching = searchable.length > 0 && searchable.every((a) => a.webSearch === true);
+  const someSearching = searchable.some((a) => a.webSearch === true);
   const toggleSearchAll = () => {
     const ids = new Set(searchable.map((a) => a.id));
     setAgents((prev) => prev.map((a) => (ids.has(a.id) ? { ...a, webSearch: !allSearching } : a)));
@@ -396,20 +397,37 @@ export function Sidebar(props: Props) {
           <button className="small-btn" onClick={onOpenAnalytics} title="Usage, latency and model performance">
             Stats
           </button>
-          <button
-            className={`small-btn ${allSearching ? "search-on" : ""}`}
-            onClick={toggleSearchAll}
-            disabled={searchable.length === 0}
+          {/*
+            A switch, not a button labelled with its action.
+            "Search: all" was read as a statement about the line-up — that all
+            models had search — rather than as something to press. A checkbox
+            cannot be misread that way: it shows the state, and the half-tick
+            says some agents are searching and some are not.
+          */}
+          <label
+            className={`tool-toggle ${searchable.length === 0 ? "is-disabled" : ""}`}
             title={
               searchable.length === 0
                 ? "No agent here can search the web. Providers with built-in search can, and Settings → Web search gives it to the rest"
                 : allSearching
-                  ? `Turn web search off for all ${searchable.length} agents using it`
-                  : `Turn web search on for the ${searchable.length} agent${searchable.length === 1 ? "" : "s"} that can search`
+                  ? `Searching: all ${searchable.length} agents that can. Click to switch it off`
+                  : `Click to switch web search on for the ${searchable.length} agent${
+                      searchable.length === 1 ? "" : "s"
+                    } that can search`
             }
           >
-            {allSearching ? "Search: none" : "Search: all"}
-          </button>
+            <input
+              type="checkbox"
+              checked={allSearching}
+              disabled={searchable.length === 0}
+              ref={(el) => {
+                // Neither on nor off, when only some of them are searching.
+                if (el) el.indeterminate = someSearching && !allSearching;
+              }}
+              onChange={toggleSearchAll}
+            />
+            Web search
+          </label>
         </div>
 
         {showForm && (

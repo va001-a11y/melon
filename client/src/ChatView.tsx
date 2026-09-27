@@ -30,6 +30,8 @@ interface Props {
   pacing: boolean;
   paceLimit: number;
   formatReplies: boolean;
+  /** Whether the user asked to see reasoning, so the drawer can obey it. */
+  detailedCoT: boolean;
   onRerun: (blockId: string, agentId: string, mode: "retry" | "regenerate" | "continue") => void;
   /**
    * Replace a question you already asked and run it again. Everything after
@@ -186,6 +188,7 @@ function UserBubble({
 
 function AgentCard({
   response,
+  showReasoning,
   onFlag,
   readsBefore,
   waitingFor,
@@ -205,6 +208,8 @@ function AgentCard({
   pacing: boolean;
   now: number;
   formatted: boolean;
+  /** The "Show reasoning" setting, which the drawer has to actually obey. */
+  showReasoning: boolean;
   /** Only worth showing when a run actually spans more than one team. */
   showTeam: boolean;
   onRerun: (agentId: string, mode: "retry" | "regenerate" | "continue") => void;
@@ -333,8 +338,17 @@ function AgentCard({
           ↳ read {readsBefore.join(", ")}
         </div>
       )}
-      {cot && (
-        <details className="cot" open={reasoningInProgress}>
+      {/*
+        Obey the setting, with one exception that has to exist.
+        Reasoning models on OpenAI-compatible providers cannot be told not to
+        think — Ollama can, and is — so their thinking arrives whether or not
+        it was asked for. Hiding it costs nothing while there is an answer to
+        read. It only appears against the setting when the reply FINISHED with
+        no answer at all, because the alternative there is an empty card, and
+        the cut-off note beneath it says in words why this is all there is.
+      */}
+      {cot && (showReasoning || (response.status === "done" && !answer)) && (
+        <details className="cot" open={reasoningInProgress && showReasoning}>
           <summary>Reasoning</summary>
           <div className="cot-body">{cot}</div>
         </details>
@@ -519,6 +533,7 @@ export function ChatView({
   pacing,
   paceLimit,
   formatReplies,
+  detailedCoT,
   onRerun,
   onBranch,
 }: Props) {
@@ -695,6 +710,7 @@ export function ChatView({
                       pacing={pacing}
                       now={now}
                       formatted={formatReplies}
+                      showReasoning={detailedCoT}
                       showTeam={new Set(m.agentOrder.map((x) => m.responses[x]?.team ?? 1)).size > 1}
                       onRerun={(agentId, mode) => onRerun(m.id, agentId, mode)}
                       busy={running}

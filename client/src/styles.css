@@ -1361,12 +1361,52 @@ body {
 
 .sidebar-tools {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 12px;
 }
 
 .sidebar-tools .small-btn {
   flex: 1;
+}
+
+/*
+ * A switch that sits in a row of buttons without pretending to be one.
+ *
+ * Its own line rather than a third of the row: at a sidebar's width the label
+ * wrapped to "Web / search" and pushed the whole row taller. It is a
+ * different kind of control anyway — a state, not an action — so reading it
+ * as a settings row rather than a button is the honest presentation.
+ */
+.tool-toggle {
+  flex: 1 0 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  white-space: nowrap;
+  gap: 6px;
+  background: var(--bg-card);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tool-toggle:hover {
+  color: var(--text);
+}
+
+.tool-toggle input {
+  margin: 0;
+  cursor: inherit;
+}
+
+.tool-toggle.is-disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* ---------- Context menu ---------- */

@@ -680,6 +680,34 @@ across all four cases instead.
 
 ---
 
+### The reasoning drawer ignored the setting that controls it
+
+`2026-09-27` - "I legitimately got slightly annoyed when the reasoning panel
+still came up after disabling it." Correct to be annoyed: a toggle that
+visibly does not do what it says is a defect, whatever the justification.
+
+The justification was real but applied too widely. Capturing a reasoning
+model's thinking stopped blank cards when a model spent its whole budget
+thinking, so it was captured and shown *always* - including when there was a
+perfectly good answer underneath, where hiding it costs nothing.
+
+The rule is narrower now. With the setting off the drawer is hidden, except
+when the reply **finished with no answer at all** - there the alternative is
+an empty card, and the cut-off note beneath says in words why the reasoning is
+all there is. While a reply is still streaming it stays hidden, so it cannot
+flash into view and then vanish when the answer starts.
+
+`think: false` shrank this further: Ollama models produce no reasoning at all
+now when the toggle is off, so the exception only reaches providers on the
+OpenAI-compatible wire, which have no equivalent switch.
+
+**Worth remembering:** the fix for one failure became the cause of another,
+because it was applied to every case rather than the failing one. The first
+fix looked complete, which is why it took a user's irritation to find the
+edge it had trampled.
+
+---
+
 ### "Show reasoning" was off and the model reasoned for seven minutes
 
 `2026-09-27` - with the toggle off, gemma4:26b sat at `writing... 439s` on the
