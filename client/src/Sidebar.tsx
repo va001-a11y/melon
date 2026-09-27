@@ -3,6 +3,7 @@ import type { Agent, ChatMeta, Preset, ProviderDef } from "./types";
 import { ROLES, makeId, nextColor } from "./defaults";
 import { ContextMenu } from "./ContextMenu";
 import type { MenuItem } from "./ContextMenu";
+import { webSearchBlockReason } from "@melon/core";
 import { AgentForm, EMPTY_DRAFT, draftFromAgent } from "./AgentForm";
 import type { AgentDraft } from "./AgentForm";
 
@@ -99,6 +100,32 @@ export function Sidebar(props: Props) {
       }
     });
   }, [chats, chatQuery]);
+
+  /*
+   * Web search across the whole line-up, in one click.
+   *
+   * It is set per agent, which is right — a researcher wants sources and a
+   * simplifier does not — but switching it on for eight agents meant eight
+   * trips through right-click, Edit properties, tick, Save. The per-agent
+   * switch stays the source of truth; this writes to all of them at once, the
+   * way the All/None button already does for a role group.
+   *
+   * Only agents that can actually search are touched. Leaving the rest alone
+   * matters: an agent told to search when it cannot fails its turn on purpose,
+   * and a bulk action should never arm that.
+   */
+  const searchable = useMemo(
+    () =>
+      agents.filter(
+        (a) => webSearchBlockReason(providers.find((p) => p.id === a.provider), a.model, melonSearch) === null
+      ),
+    [agents, providers, melonSearch]
+  );
+  const allSearching = searchable.length > 0 && searchable.every((a) => a.webSearch === true);
+  const toggleSearchAll = () => {
+    const ids = new Set(searchable.map((a) => a.id));
+    setAgents((prev) => prev.map((a) => (ids.has(a.id) ? { ...a, webSearch: !allSearching } : a)));
+  };
 
   const roleGroups = useMemo(() => {
     const groups = new Map<string, Agent[]>();
@@ -368,6 +395,20 @@ export function Sidebar(props: Props) {
           </button>
           <button className="small-btn" onClick={onOpenAnalytics} title="Usage, latency and model performance">
             Stats
+          </button>
+          <button
+            className={`small-btn ${allSearching ? "search-on" : ""}`}
+            onClick={toggleSearchAll}
+            disabled={searchable.length === 0}
+            title={
+              searchable.length === 0
+                ? "No agent here can search the web. Providers with built-in search can, and Settings → Web search gives it to the rest"
+                : allSearching
+                  ? `Turn web search off for all ${searchable.length} agents using it`
+                  : `Turn web search on for the ${searchable.length} agent${searchable.length === 1 ? "" : "s"} that can search`
+            }
+          >
+            {allSearching ? "Search: none" : "Search: all"}
           </button>
         </div>
 
