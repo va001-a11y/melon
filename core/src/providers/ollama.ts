@@ -63,7 +63,10 @@ export async function ollamaMaxContext(baseUrl: string | undefined, model: strin
   try {
     const res = await fetch(`${root}/api/show`, {
       method: "POST",
-      signal,
+      // A local lookup that answers in milliseconds, so it gets a short
+      // deadline of its own when the caller has no signal to offer. A wedged
+      // daemon should not hold a conversation open indefinitely.
+      signal: signal ?? AbortSignal.timeout(3000),
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ model }),
     });

@@ -182,7 +182,14 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
     req.agents
       .filter((a) => a.provider === "ollama")
       .map(async (a) => {
-        localWindows.set(a.id, await ollamaMaxContext(a.baseUrl, a.model, controller.signal));
+        // No run signal here on purpose: this happens before the run is
+        // registered with the stop controller, so there is nothing yet for
+        // the user to stop. Passing `controller.signal` read it before its
+        // declaration below — legal to TypeScript, because the reference is
+        // inside a callback, and a ReferenceError at runtime for every
+        // conversation with a local model in it. ollamaMaxContext applies its
+        // own short timeout instead.
+        localWindows.set(a.id, await ollamaMaxContext(a.baseUrl, a.model));
       })
   );
   const smallest = req.agents.reduce(

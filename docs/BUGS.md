@@ -658,6 +658,42 @@ silently not arriving. Pattern 1 has a mirror image.
 
 ---
 
+## After v0.3.0 (2026-09-27)
+
+### v0.3.0 shipped broken for every local model
+
+`2026-09-27` - reported within hours of release: any conversation with an
+Ollama agent returned **500 Server error**, with
+`ReferenceError: Cannot access 'controller' before initialization`.
+
+The Ollama context lookup added the day before ran before the guard, and
+passed `controller.signal` to it. `controller` is declared forty lines
+further down. The reference sits inside an `async` arrow handed to `.map()`,
+so TypeScript accepted it - a callback *might* run later - and this one runs
+immediately, inside `Promise.all`.
+
+The signal should never have been there: that code runs before the run is
+registered with the stop controller, so there is nothing yet to cancel. The
+lookup now carries its own three-second deadline instead, so a wedged daemon
+cannot hold a conversation open.
+
+**Why nothing caught it.** The compiler cannot see it. The orchestrator test
+written the same day used *demo* agents, so
+`.filter((a) => a.provider === "ollama")` produced an empty array and the
+callback never ran. Every check passed on a code path that was never
+executed. The live Ollama test that day called the adapter directly and
+bypassed `runConversation` entirely.
+
+The regression test now runs a whole conversation with an Ollama agent
+against a stubbed daemon. Against the released code it throws the exact
+ReferenceError; against the fix it passes.
+
+**The lesson, and it is not a new one here:** a test that exercises an empty
+array proves nothing. Pattern 2 in a fresh disguise - a guard written,
+declared to work, and never actually reached.
+
+---
+
 ## Testing notes that cost time to learn
 
 - **A `window.fetch` recorder does not see** dynamic `import()` or Worker
