@@ -121,10 +121,17 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
           <label className="settings-row checkbox-row">
             <span>
               Answer simultaneously
+              {/*
+                Two audiences. Someone who has built a pipeline needs to know
+                the hand-off between teams survives; someone with a single team
+                needs to know the arrangement exists at all, since "everyone
+                replies at once" reads like the opposite of a relay and gives
+                no hint that the two combine.
+              */}
               <small>
                 {hasPipeline
                   ? "Off: agents take turns. On: everyone in the same team replies at once — but teams still run one after another, because each needs the previous team's work"
-                  : "Off: agents take turns and read each other. On: everyone replies at once"}
+                  : "Off: agents take turns and read each other. On: everyone replies at once. Split agents into teams to get both — parallel within a stage, sequential between them"}
               </small>
             </span>
             <input
