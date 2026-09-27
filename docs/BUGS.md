@@ -660,6 +660,26 @@ silently not arriving. Pattern 1 has a mirror image.
 
 ## After v0.3.0 (2026-09-27)
 
+### "Stopped mid-sentence" described a sentence that never started
+
+`2026-09-27` - a reasoning model can spend its whole reply-length budget
+thinking and write no answer at all. The cut-off note said it had "stopped
+mid-sentence" and offered to continue: one describes something that never
+happened, and the other points at a button with nothing to resume from.
+
+The note now reads the reply before describing it. No answer but reasoning
+present says the limit went on thinking, names the reasoning above as what
+survived, and suggests raising the limit or switching Show reasoning off.
+Anything with an answer in it keeps the original wording, because that one was
+accurate. Continue is hidden entirely when there is no answer to continue.
+
+**Not verified in a browser**, unusually: the port was held by a Melon running
+from an extracted zip rather than the repo, and interrupting a live session
+for a wording change was not worth it. The branch condition is tested directly
+across all four cases instead.
+
+---
+
 ### "Show reasoning" was off and the model reasoned for seven minutes
 
 `2026-09-27` - with the toggle off, gemma4:26b sat at `writing... 439s` on the

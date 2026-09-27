@@ -415,12 +415,32 @@ function AgentCard({
         </details>
       )}
 
-      {/* A reply that stops mid-sentence should always say why. */}
+      {/*
+        A reply that stops early should always say why — and the two ways it
+        happens need different advice.
+
+        A reasoning model can spend the entire budget thinking and write no
+        answer at all. Telling that user it "stopped mid-sentence" describes a
+        sentence that was never started, and "ask it to continue" points at a
+        button that has nothing to continue from.
+      */}
       {response.status === "done" && response.finishReason === "length" && (
         <div className="cutoff-note">
-          <b>Cut off early.</b> This model reached the reply-length limit
-          {response.replyLimit ? ` of ${response.replyLimit.toLocaleString()} tokens` : ""} and stopped mid-sentence.
-          Raise it in <b>Settings → Reply length</b>, or ask it to continue.
+          {!answer && cot ? (
+            <>
+              <b>It ran out of room while thinking.</b> This model reasons before it answers, and the reply-length
+              limit{response.replyLimit ? ` of ${response.replyLimit.toLocaleString()} tokens` : ""} was used up
+              before it wrote any of the answer — the reasoning above is what it managed. Raise the limit in{" "}
+              <b>Settings → Reply length</b>, or switch <b>Show reasoning</b> off, which asks models that support it
+              to answer directly.
+            </>
+          ) : (
+            <>
+              <b>Cut off early.</b> This model reached the reply-length limit
+              {response.replyLimit ? ` of ${response.replyLimit.toLocaleString()} tokens` : ""} and stopped
+              mid-sentence. Raise it in <b>Settings → Reply length</b>, or ask it to continue.
+            </>
+          )}
         </div>
       )}
       {response.status === "done" && response.finishReason === "filtered" && (
@@ -442,7 +462,9 @@ function AgentCard({
               ↻ Retry
             </button>
           )}
-          {response.finishReason === "length" && (
+          {/* Continue needs something to continue from: a reply that spent
+              its whole budget reasoning has no answer to resume. */}
+          {response.finishReason === "length" && !!answer && (
             <button
               className="card-action primary"
               onClick={() => onRerun(response.agentId, "continue")}
