@@ -770,6 +770,34 @@ declared to work, and never actually reached.
 
 ---
 
+## After v0.3.3 (2026-10-01)
+
+### Three releases, one filename
+
+`2026-10-01` - reported as "the web search button randomly disappeared". It
+had not. The window showing no toggle was running an extract of **0.3.2**,
+which was built before the toggle existed.
+
+The cause was the packaging script, which named the zip by date:
+`Melon-${stamp}.zip`. v0.3.1, v0.3.2 and v0.3.3 all shipped on 27 September,
+so all three releases carry an asset called `Melon-2026-09-27.zip`, all three
+extract to a folder of the same name, and nothing in either name says which
+version it is. Download a new one into a folder holding an old one and the
+distinction is invisible.
+
+Named `Melon-v<version>-<date>.zip` now. The version leads because that is
+what anyone needs to compare; the date stays because it still distinguishes
+rebuilds of the same version.
+
+**Worth noting about the report itself:** "randomly disappeared" was an
+accurate description of the user's experience and a misleading description of
+the fault. Nothing was random and nothing disappeared. Chasing the symptom
+would have meant hunting a React rendering bug that did not exist; the actual
+question was *which build is that window running*, which took one grep of the
+extracted folder to answer.
+
+---
+
 ## Testing notes that cost time to learn
 
 - **A `window.fetch` recorder does not see** dynamic `import()` or Worker

@@ -55,8 +55,22 @@ function human(bytes) {
   return bytes > 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
 }
 
+/*
+ * Named by version, not by date.
+ *
+ * Three releases went out on 27 September, and every one of them produced
+ * "Melon-2026-09-27.zip". Same asset name on three GitHub releases, same
+ * folder name when extracted, and no way to tell from either which version
+ * you were running — which is how a control that shipped in 0.3.3 looked
+ * like it had vanished from an extract of 0.3.2.
+ *
+ * The date goes in too, after the version, because it is genuinely useful
+ * when the same version is rebuilt — but the version leads, because that is
+ * the thing people need to compare.
+ */
 const stamp = new Date().toISOString().slice(0, 10);
-const outName = `Melon-${stamp}.zip`;
+const version = JSON.parse(readFileSync(join(PLATFORM_DIR, "package.json"), "utf8")).version;
+const outName = `Melon-v${version}-${stamp}.zip`;
 const outPath = join(dirname(PLATFORM_DIR), outName);
 
 /*
