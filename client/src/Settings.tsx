@@ -56,7 +56,17 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
           <label className="settings-row">
             <span>
               Reply length
-              <small>How much each agent may write per turn</small>
+              {/*
+                The budget covers reasoning as well as the answer, which is
+                invisible until it bites: a reasoning model asked a real
+                question can spend all 400 of "Short" thinking and write
+                nothing. Saying so here is cheaper than the user finding out
+                from a reply that never arrived.
+              */}
+              <small>
+                How much each agent may write per turn, <b>including any reasoning</b> — a model that thinks first
+                spends part of the budget there
+              </small>
             </span>
             <select
               value={replyKey}
@@ -67,7 +77,7 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
             >
               {REPLY_LENGTHS.map((r) => (
                 <option key={r.key} value={r.key}>
-                  {r.label} — {r.hint}
+                  {r.label} — {r.hint} ({r.tokens.toLocaleString()} tokens)
                 </option>
               ))}
               {replyKey === "custom" && <option value="custom">Custom ({settings.maxOutputTokens})</option>}
