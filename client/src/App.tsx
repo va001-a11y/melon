@@ -247,10 +247,13 @@ function charsOf(list: Message[]): number {
 
 export default function App() {
   const [agents, setAgents] = useState<Agent[]>(() => loadList("melon.agents", normaliseAgent));
-  const [settings, setSettings] = useState<Settings>(() => ({
-    ...DEFAULT_SETTINGS,
-    ...loadJson<Partial<Settings>>("melon.settings", {}),
-  }));
+  const [settings, setSettings] = useState<Settings>(() => {
+    const stored = { ...DEFAULT_SETTINGS, ...loadJson<Partial<Settings>>("melon.settings", {}) };
+    // "Meme / Creative" became "Creative". Without this the saved key would
+    // not match any entry in MODES and the dropdown would show a blank.
+    if (stored.mode === "meme") stored.mode = "creative";
+    return stored;
+  });
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [showMarketplace, setShowMarketplace] = useState(false);
   const [showSettings, setShowSettings] = useState(false);

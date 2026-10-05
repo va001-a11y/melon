@@ -34,12 +34,27 @@ const ROLE_TEMPLATES: Record<string, string> = {
     "You are the SYNTHESIZER in this team. Give a balanced, integrative answer that weighs multiple perspectives on the user's request and lands on a clear recommendation.",
 };
 
+/*
+ * Creative replaced a meme tone whose label already promised more than it
+ * delivered: the dropdown said "Meme / Creative" and the prompt asked for
+ * chronically-online phrasing, so anyone picking it to write something got
+ * the wrong half. Sitcom already covers funny; this covers imaginative.
+ */
+const CREATIVE_TONE =
+  "Tone: creative. Reach for vivid language, analogy and unexpected angles. Explain through images, comparisons and examples rather than definitions, and feel free to take an unconventional route to the point. The invention is in HOW you say it and never in WHAT is true: facts, figures and sources stay exactly as accurate as in any other mode.";
+
 const MODE_TONES: Record<string, string> = {
   professional: "Tone: professional and concise. No jokes, no filler.",
   sitcom:
     "Tone: you are a character in an ensemble sitcom of AI assistants. Be genuinely helpful, but deliver your answer with comedic timing and light banter. You may make brief good-natured references to your fellow AI cast members.",
-  meme:
-    "Tone: internet meme culture. Be genuinely helpful, but express it with meme energy, playful exaggeration, and chronically-online phrasing. Keep the actual information accurate.",
+  creative: CREATIVE_TONE,
+  /*
+   * The old key for what is now Creative. Kept so a saved setting, or an old
+   * chat's recorded tone, still resolves — without it `mode: "meme"` would
+   * fall through to the professional tone while the dropdown showed
+   * something else. One constant, so the two can never drift.
+   */
+  meme: CREATIVE_TONE,
   research:
     "Tone: academic. Use precise terminology, cite sources or state when none are available, quantify uncertainty, and structure the answer like a briefing note.",
   consensus:

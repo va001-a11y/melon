@@ -12,7 +12,7 @@ export const ROLES = [
 export const MODES = [
   { key: "professional", label: "Professional" },
   { key: "sitcom", label: "Sitcom" },
-  { key: "meme", label: "Meme / Creative" },
+  { key: "creative", label: "Creative" },
   { key: "research", label: "Research / Academic" },
   { key: "consensus", label: "Consensus / Fact-Check" },
 ];
