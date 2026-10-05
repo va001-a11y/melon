@@ -18,6 +18,7 @@ import type { ThemeChoice } from "./themes";
 import { Settings as SettingsModal } from "./Settings";
 import { Analytics } from "./Analytics";
 import { Marketplace } from "./Marketplace";
+import { BUNDLES } from "@melon/core";
 import { estimateRun, formatUsd } from "./cost";
 import type { HistoryTurn } from "./api";
 import { splitCot } from "./cot";
@@ -949,6 +950,10 @@ export default function App() {
           detailedCoT={settings.detailedCoT}
           agentCount={agents.length}
           onOpenPresets={() => setShowMarketplace(true)}
+          onTryDemo={() => {
+            const demo = BUNDLES.find((b) => b.id === "demo-team");
+            if (demo) installBundle(demo);
+          }}
           onRerun={(blockId, agentId, mode) => void rerunAgent(blockId, agentId, mode)}
           onBranch={branchFrom}
           onEditUser={editUserMessage}

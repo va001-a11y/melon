@@ -34,8 +34,10 @@ interface Props {
   detailedCoT: boolean;
   /** Every agent configured, on or off — the empty state turns on this. */
   agentCount: number;
-  /** Opens the preset marketplace, which is the fastest first step. */
+  /** Opens the preset marketplace — the second step, not the first. */
   onOpenPresets: () => void;
+  /** Installs the keyless demo team, so the app can be seen working at once. */
+  onTryDemo: () => void;
   onRerun: (blockId: string, agentId: string, mode: "retry" | "regenerate" | "continue") => void;
   /**
    * Replace a question you already asked and run it again. Everything after
@@ -540,6 +542,7 @@ export function ChatView({
   detailedCoT,
   agentCount,
   onOpenPresets,
+  onTryDemo,
   onRerun,
   onBranch,
 }: Props) {
@@ -671,12 +674,25 @@ export function ChatView({
             {agentCount === 0 ? (
               <>
                 <p>Several AI models, working through one question together. Start by giving it some models.</p>
-                <button className="primary-btn welcome-cta" onClick={onOpenPresets}>
-                  Install a ready-made team
+                {/*
+                  The keyless demo, not the preset catalogue and not the agent
+                  form. Seven bundles is a lot to weigh up before seeing the
+                  app do anything, and "+ Add" is worse — it asks for a
+                  provider, a model and an API key from someone who may hold
+                  none of them. This asks for one click and shows the relay
+                  working; everything else makes sense afterwards.
+                */}
+                <button className="primary-btn welcome-cta" onClick={onTryDemo}>
+                  Try it with three demo models
                 </button>
                 <p className="hint">
-                  Or <b>+ Add</b> in the sidebar to set one up yourself. You will need an API key from a provider —
-                  except the demo agent, which needs nothing.
+                  No API key needed — they run inside Melon. When you want real models, use <b>Presets</b> for a
+                  ready-made team or <b>+ Add</b> in the sidebar to set one up yourself.
+                </p>
+                <p className="hint">
+                  <button className="link-btn" onClick={onOpenPresets}>
+                    Browse ready-made teams
+                  </button>
                 </p>
               </>
             ) : activeCount === 0 ? (

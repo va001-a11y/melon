@@ -2234,6 +2234,21 @@ body {
   min-width: 84px;
 }
 
+/* A secondary action that should not compete with the primary one. */
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.welcome-cta {
+  margin: 12px 0 4px;
+}
+
 .clear-btn {
   margin-top: 8px;
 }
