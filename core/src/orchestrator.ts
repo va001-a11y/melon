@@ -21,6 +21,7 @@ import { stopController } from "./stop.js";
 import { HARD_AGENT_CAP } from "./registry.js";
 import { PROVIDERS, contextWindowFor, getProvider, supportsVision, webSearchBlockReason } from "./catalog.js";
 import {
+  MAX_SEARCH_BLOCK_TOKENS,
   formatSearchContext,
   getSearchProvider,
   pruneUnusedSources,
@@ -196,8 +197,23 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
     (min, a) => Math.min(min, localWindows.get(a.id) ?? contextWindowFor(a.provider)),
     Number.POSITIVE_INFINITY
   );
-  // Leave headroom for the reply itself plus the system prompt.
-  const usableWindow = Math.max(1000, smallest - req.settings.maxOutputTokens - 800);
+  /*
+   * Leave headroom for the reply itself, the system prompt, and — when Melon
+   * will be doing the searching — the results it is about to paste in.
+   *
+   * The guard runs before any search, so without this reservation it would
+   * promise room that the search then spends, and the model would be handed
+   * more than its window holds. Only reserved when a Melon-side search can
+   * actually happen: a provider searching natively costs nothing here,
+   * because those results never pass through Melon.
+   */
+  const melonSearchPossible =
+    Boolean(req.settings.searchProvider && req.settings.searchApiKey?.trim()) &&
+    req.agents.some(
+      (a) => a.webSearch === true && webSearchBlockReason(getProvider(a.provider), a.model) !== null
+    );
+  const searchReserve = melonSearchPossible ? MAX_SEARCH_BLOCK_TOKENS : 0;
+  const usableWindow = Math.max(1000, smallest - req.settings.maxOutputTokens - 800 - searchReserve);
   const startingContext = contextTokens(req.history, req.userMessage, req.attachments ?? []);
   if (startingContext >= usableWindow) {
     sink.send("context-full", { used: startingContext, limit: usableWindow });

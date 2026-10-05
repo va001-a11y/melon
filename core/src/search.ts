@@ -229,6 +229,45 @@ export function pruneUnusedSources(
 }
 
 /**
+ * How much of one result is pasted into the prompt.
+ *
+ * Tavily returns cleaned page text, so a single result can run to thousands
+ * of characters and five can run to tens of thousands — all of it chosen by
+ * whoever wrote the page. Unbounded, that hands a stranger two things: room
+ * for an elaborate instruction, and the ability to push the user's actual
+ * question far from the end of the prompt, where models weight most heavily.
+ *
+ * It is a robustness fix before it is a security one. The context guard
+ * measures the conversation before search results are added, so an
+ * unbounded block also makes its estimate wrong by however much the web
+ * happened to return.
+ *
+ * 1,500 characters is roughly 375 tokens — enough for the part of a page
+ * that answers a question, which is almost always near the top.
+ */
+const MAX_SNIPPET_CHARS = 1500;
+
+/**
+ * The most a search block can cost, in tokens, now that each result is
+ * bounded: five results of 1,500 characters plus their titles, URLs and the
+ * instructions above them, at roughly four characters per token.
+ *
+ * The context guard measures the conversation before any search has run, so
+ * without reserving this it would promise room that the search then spends.
+ */
+export const MAX_SEARCH_BLOCK_TOKENS = 2200;
+
+/** Cut at a sentence end if there is one nearby, otherwise at a word. */
+function clampSnippet(text: string, limit = MAX_SNIPPET_CHARS): string {
+  if (text.length <= limit) return text;
+  const cut = text.slice(0, limit);
+  const sentence = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+  if (sentence > limit * 0.5) return cut.slice(0, sentence + 1) + " […]";
+  const word = cut.lastIndexOf(" ");
+  return (word > limit * 0.5 ? cut.slice(0, word) : cut) + " […]";
+}
+
+/**
  * Turn hits into the block the model reads.
  *
  * Numbered, because the model is asked to cite by number, and labelled as
@@ -239,7 +278,7 @@ export function formatSearchContext(query: string, hits: SearchHit[]): string {
     return `WEB SEARCH: Melon searched the web for "${query}" and found nothing usable. Say so rather than answering from memory as though you had sources.`;
   }
   const body = hits
-    .map((h, i) => `[${i + 1}] ${h.title || h.url}\n${h.url}\n${h.snippet}`)
+    .map((h, i) => `[${i + 1}] ${h.title || h.url}\n${h.url}\n${clampSnippet(h.snippet)}`)
     .join("\n\n");
   return (
     `WEB SEARCH RESULTS — Melon searched the web for "${query}" and pasted the results below verbatim.\n` +
