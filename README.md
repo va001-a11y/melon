@@ -112,6 +112,20 @@ Melon is bring-your-own-key. Your keys stay in your browser, requests go straigh
 
 That is a prompt instruction, not a sandbox, so treat it as a speed bump rather than a wall. The standing advice is the one Melon shows you in the app: a reply that cites no sources is unverified, whoever wrote it.
 
+**Where your keys actually live, and who could reach them.** Browser storage is scoped to the *origin* serving the page, and Melon does not own its origin in either build.
+
+| Build | Origin | Who else can read that storage |
+| --- | --- | --- |
+| [Hosted](https://va001-a11y.github.io/melon/) | `va001-a11y.github.io` | Any page published to that GitHub account |
+| Desktop | `http://127.0.0.1:5173` | Any other local dev server you run on that port — 5173 is Vite's default |
+
+For the hosted version this means something worth stating outright: **using it is trusting whoever publishes it, not only the code.** A different page served from that same origin could read a key stored by Melon, and nothing ties the deployed files to this repository in a way a visitor can check. That is true of every hosted bring-your-own-key tool, not a quirk of this one — but it is the reason the hosted build exists mainly to try Melon with the keyless demo.
+
+**If that matters to you, run it from source.** Clone the repository, read what you are about to run, and start it yourself. Then the only parties are you and your model provider, which is the arrangement the rest of this section describes.
+
+The desktop row is the same property with a different neighbour: `127.0.0.1:5173` is Vite's default port, so another project of your own could share that storage. Melon pins its port deliberately — moving it would change the origin and make every saved chat, agent and key vanish, which is a worse outcome than the risk.
+
+
 ### Sending Melon to another computer
 
 Don't copy the whole folder — run this instead:

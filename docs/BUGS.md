@@ -798,6 +798,38 @@ extracted folder to answer.
 
 ---
 
+### Melon does not own the origin its keys are stored under
+
+`2026-10-05` - not a defect, and recorded because it is the kind of thing
+that is obvious once seen and invisible until someone asks.
+
+Browser storage is scoped to an origin. The hosted build's origin is
+`va001-a11y.github.io`, which belongs to a GitHub *account*, not to Melon, so
+any page ever published there can read keys a visitor stored through Melon -
+and nothing ties the deployed bundle to this repository in a way a visitor
+can verify. Using a hosted bring-your-own-key tool means trusting its
+publisher, not only its source code.
+
+The desktop build has the same property with a different neighbour:
+`127.0.0.1:5173` is Vite's default port, so another local project could share
+that storage. **Not fixed on purpose.** Changing the port changes the origin,
+and the entry above about dynamic ports records what that does: every chat,
+agent and key appears to vanish, with no migration possible across origins.
+The cure is worse than the disease, so it is documented in the README
+instead.
+
+Checked at the same time and all clean: the server binds to 127.0.0.1 only,
+sets no CORS headers so cross-origin reads are refused, logs nothing but a
+startup line and two errors, and the client has no `innerHTML`, no `eval` and
+no rendered images. Three moderate dependency advisories, all tracing to
+`qs`, were cleared in the same pass.
+
+**The useful question was the user's, not mine:** "is it a risk of ME having
+access to a user's API keys?" The honest answer is yes, and writing that down
+makes the project more trustworthy rather than less.
+
+---
+
 ## Testing notes that cost time to learn
 
 - **A `window.fetch` recorder does not see** dynamic `import()` or Worker
