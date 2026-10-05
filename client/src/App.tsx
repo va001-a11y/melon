@@ -947,6 +947,8 @@ export default function App() {
           paceLimit={settings.tokensPerMinute}
           formatReplies={settings.formatReplies}
           detailedCoT={settings.detailedCoT}
+          agentCount={agents.length}
+          onOpenPresets={() => setShowMarketplace(true)}
           onRerun={(blockId, agentId, mode) => void rerunAgent(blockId, agentId, mode)}
           onBranch={branchFrom}
           onEditUser={editUserMessage}

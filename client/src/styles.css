@@ -732,12 +732,19 @@ body {
 
 /* Icon-only stop: a red square, the conventional glyph. The accessible
    name comes from aria-label, since there is no longer any visible text. */
+/*
+ * Send and Stop are the same size on purpose.
+ *
+ * They occupy the same corner and are never both usable, so the pair should
+ * read as one control that changes rather than two of different weight. A
+ * 42px square beside a text button looked like an afterthought bolted to the
+ * side of Send. The shared min-width is set on both below.
+ */
 .stop-btn {
   background: var(--danger);
   color: #fff;
   border: none;
   border-radius: 10px;
-  width: 42px;
   height: 42px;
   flex-shrink: 0;
   display: inline-flex;
@@ -2215,6 +2222,16 @@ body {
 .primary-btn:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+/*
+ * One width for both composer buttons, so neither moves when the run starts
+ * and Send becomes "…". Set on the row rather than on .primary-btn globally,
+ * which is also used for the welcome call to action.
+ */
+.composer-row .primary-btn,
+.composer-row .stop-btn {
+  min-width: 84px;
 }
 
 .clear-btn {

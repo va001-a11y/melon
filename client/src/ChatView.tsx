@@ -32,6 +32,10 @@ interface Props {
   formatReplies: boolean;
   /** Whether the user asked to see reasoning, so the drawer can obey it. */
   detailedCoT: boolean;
+  /** Every agent configured, on or off — the empty state turns on this. */
+  agentCount: number;
+  /** Opens the preset marketplace, which is the fastest first step. */
+  onOpenPresets: () => void;
   onRerun: (blockId: string, agentId: string, mode: "retry" | "regenerate" | "continue") => void;
   /**
    * Replace a question you already asked and run it again. Everything after
@@ -534,6 +538,8 @@ export function ChatView({
   paceLimit,
   formatReplies,
   detailedCoT,
+  agentCount,
+  onOpenPresets,
   onRerun,
   onBranch,
 }: Props) {
@@ -653,13 +659,44 @@ export function ChatView({
 
       <div className="messages" ref={scrollRef} onScroll={onScroll}>
         {messages.length === 0 && (
+          /*
+            The centre of an empty screen should say what to do next, not
+            describe the product. For a new install the next step is not in
+            the composer at all — Send is disabled until an agent exists — so
+            pointing at the question box would be pointing at the one thing
+            that cannot yet be done.
+          */
           <div className="welcome">
             <h1>🍈 Melon</h1>
-            <p>Bring your own models, switch on the ones you want, and let them work through a question together.</p>
-            <p className="hint">
-              Agents take turns by default, each building on the last. {recommendedMax} or fewer works best; {hardCap} is
-              the hard limit.
-            </p>
+            {agentCount === 0 ? (
+              <>
+                <p>Several AI models, working through one question together. Start by giving it some models.</p>
+                <button className="primary-btn welcome-cta" onClick={onOpenPresets}>
+                  Install a ready-made team
+                </button>
+                <p className="hint">
+                  Or <b>+ Add</b> in the sidebar to set one up yourself. You will need an API key from a provider —
+                  except the demo agent, which needs nothing.
+                </p>
+              </>
+            ) : activeCount === 0 ? (
+              <>
+                <p>
+                  {agentCount === 1 ? "Your agent is" : `All ${agentCount} of your agents are`} switched off. Click
+                  {agentCount === 1 ? " it " : " one "}
+                  in the sidebar to bring {agentCount === 1 ? "it" : "them"} back.
+                </p>
+                <p className="hint">Clicking an agent turns only that one on or off, so any combination is a few clicks.</p>
+              </>
+            ) : (
+              <>
+                <p>Ask {activeCount === 1 ? "your agent" : `all ${activeCount} agents`} a question.</p>
+                <p className="hint">
+                  Agents take turns by default, each building on the last. {recommendedMax} or fewer works best;{" "}
+                  {hardCap} is the hard limit.
+                </p>
+              </>
+            )}
           </div>
         )}
         {messages.map((m) =>
