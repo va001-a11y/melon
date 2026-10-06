@@ -798,6 +798,50 @@ extracted folder to answer.
 
 ---
 
+### The cost preflight ignored attachments
+
+`2026-10-06` - found while answering a question about attachment limits,
+not by anything failing.
+
+The line above the composer estimates what a run will cost, and the
+confirmation dialog on an expensive run uses the same figure. Both counted
+the typed text and nothing else. Staging a 500 KB transcript and typing
+"summarise this" showed the cost of three words — the estimate was most
+wrong precisely when it mattered most, because attachments are how a cheap
+message becomes an expensive one.
+
+Attachments are counted now, through the same function the context guard
+uses rather than a second copy of the arithmetic. That part matters: a
+megabyte photo is about 1,800 tokens, while counting its base64 as prose
+would have claimed 342,000. The first version of this fix did exactly that,
+and the figure would have been wrong by a factor of 180 in the other
+direction.
+
+`attachmentTokens` is now exported from the core and used by both, so the
+estimate and the guard cannot disagree about what a file costs.
+
+### A high ceiling on attachments, and what each limit is for
+
+`2026-10-06` - there was no cap on how many files could ride on one message.
+Fifty now, which is high on purpose: three, as some tools impose, is a limit
+met while doing something reasonable, where fifty is one met by accident —
+a select-all in the wrong folder.
+
+Worth separating the three limits, because they protect different things:
+
+| Limit | Protects |
+| --- | --- |
+| 4 MB per file | The browser, from reading something huge into memory |
+| 50 files per message | The interface, from a thousand chips |
+| The context guard | The **model**, which is the only one that counts tokens |
+
+Only the last one knows what a file actually costs. A 4 MB PDF might extract
+to two thousand words or two million, so bytes never predicted tokens. The
+size check runs against `File.size` before anything is read, so a two
+gigabyte video is refused on its metadata without the browser touching it.
+
+---
+
 ### Melon does not own the origin its keys are stored under
 
 `2026-10-05` - not a defect, and recorded because it is the kind of thing

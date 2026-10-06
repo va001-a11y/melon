@@ -102,6 +102,20 @@ Providers that can search natively keep doing so; Melon's search is the fallback
 
 Search APIs are built server-to-server, so the hosted web build may be refused by CORS where the desktop build has no such limit. Melon reports what happened rather than guessing.
 
+### Audio, and what to do instead
+
+Melon does not transcribe audio, and refuses audio attachments rather than passing them to a model that will quietly ignore them. Chat models mostly cannot listen, and the ones that can are a minority of the catalog — while a model that silently drops the audio and answers anyway is the worst outcome of all.
+
+**Transcribe it elsewhere, then attach the text.** A local transcriber — [Vibe](https://thewh1teagle.github.io/vibe/), MacWhisper, `whisper.cpp` — runs on your machine, so the recording never leaves it, and handles long files, timestamps and speakers far better than anything Melon could embed. Then:
+
+1. Save the transcript as a `.txt`
+2. Attach it with 📎 (text files are inlined, up to 4 MB each and 50 files per message)
+3. Ask the panel about it
+
+**Attach the file rather than pasting the text.** Same content reaches the model, but the conversation stays readable — a named chip instead of ten thousand words in the composer.
+
+The thing to watch is not file size but **context**. A lesson transcript read by four agents is four copies of it in input tokens, measured against the smallest active model's window. The meter above the composer shows the total before you send, and Melon blocks rather than letting a provider fail halfway through. For a long recording, use fewer agents or models with larger windows.
+
 ### Security, and what Melon does not do
 
 Melon is bring-your-own-key. Your keys stay in your browser, requests go straight from your machine to the provider you chose, and there is no Melon server, no account and no logging. Nobody but you and that provider sees a conversation.

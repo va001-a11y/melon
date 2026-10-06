@@ -18,7 +18,7 @@ import type { ThemeChoice } from "./themes";
 import { Settings as SettingsModal } from "./Settings";
 import { Analytics } from "./Analytics";
 import { Marketplace } from "./Marketplace";
-import { BUNDLES } from "@melon/core";
+import { BUNDLES, attachmentTokens } from "@melon/core";
 import { estimateRun, formatUsd } from "./cost";
 import type { HistoryTurn } from "./api";
 import { splitCot } from "./cot";
@@ -401,7 +401,15 @@ export default function App() {
       const priorMessages = base ?? messages;
 
       // Preflight cost gate: expensive runs need explicit confirmation.
-      const est = estimateRun(activeAgents, settings, base ? charsOf(base) : historyChars, text.length);
+      // Attachments are part of what gets sent, so they are part of what it
+      // costs. Counting only the typed text made the gate most wrong on the
+      // runs most worth gating.
+      const est = estimateRun(
+        activeAgents,
+        settings,
+        base ? charsOf(base) : historyChars,
+        text.length + attachmentTokens(attachments) * 4
+      );
       if (est.usd >= COST_CONFIRM_THRESHOLD) {
         const ok = window.confirm(
           `This run is estimated to cost about ${formatUsd(est.usd)} ` +
@@ -938,7 +946,12 @@ export default function App() {
           running={running}
           banner={banner}
           onSend={send}
-          estimateFor={(draft) => estimateRun(activeAgents, settings, historyChars, draft.length)}
+          estimateFor={(draft, attachTokens = 0) =>
+            // estimateRun counts characters at four per token, so attachment
+            // tokens go back through that conversion rather than being
+            // measured as raw characters — a base64 image is not prose.
+            estimateRun(activeAgents, settings, historyChars, draft.length + attachTokens * 4)
+          }
           onConsensus={runConsensus}
           canConsensus={messages.some((m) => m.kind === "run")}
           onFlag={flagAgentResponse}

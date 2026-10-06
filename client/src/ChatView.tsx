@@ -6,7 +6,8 @@ import { hasCheckableClaim } from "./claims";
 import { ROLES } from "./defaults";
 import { formatUsd } from "./cost";
 import type { Estimate } from "./cost";
-import { formatSize, prepareFile } from "./files";
+import { MAX_ATTACHMENTS, formatSize, prepareFile } from "./files";
+import { attachmentTokens } from "@melon/core";
 import { Markdown } from "./Markdown";
 
 interface Props {
@@ -17,7 +18,7 @@ interface Props {
   running: boolean;
   banner: string | null;
   onSend: (text: string, attachments: Attachment[]) => void;
-  estimateFor: (draft: string) => Estimate;
+  estimateFor: (draft: string, attachTokens?: number) => Estimate;
   onConsensus: () => void;
   canConsensus: boolean;
   onFlag: (agentId: string) => void;
@@ -634,7 +635,17 @@ export function ChatView({
     setFileError(null);
     const added: Attachment[] = [];
     const errors: string[] = [];
-    for (const file of Array.from(files)) {
+    const incoming = Array.from(files);
+    const room = MAX_ATTACHMENTS - attachments.length;
+    if (incoming.length > room) {
+      errors.push(
+        room <= 0
+          ? `Already at the limit of ${MAX_ATTACHMENTS} attachments on one message.`
+          : `Only ${room} more file${room === 1 ? "" : "s"} fit on this message — the limit is ${MAX_ATTACHMENTS}. ` +
+            `The rest were not attached.`
+      );
+    }
+    for (const file of incoming.slice(0, Math.max(0, room))) {
       const { attachment, error } = await prepareFile(file);
       if (attachment) added.push(attachment);
       if (error) errors.push(error);
@@ -654,7 +665,15 @@ export function ChatView({
     onSend(text || "(see attached file)", attachments);
   };
 
-  const estimate = estimateFor(draft);
+  /*
+   * Attachments count towards the estimate.
+   *
+   * It was taken from the draft text alone, so staging a 500 KB transcript
+   * and typing "summarise this" showed the cost of three words — then sent
+   * six figures of tokens. The number was most wrong exactly when it mattered
+   * most.
+   */
+  const estimate = estimateFor(draft, attachmentTokens(attachments));
 
   return (
     <main className="chat">

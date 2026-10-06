@@ -135,15 +135,23 @@ function handoffPrompt(agent: AgentSpec, req: RunRequest, prior: PriorTurn[]): s
  * than the message it is attached to, and leaving it out let oversized
  * requests through to the provider.
  */
+/**
+ * What attachments add to a request, in tokens.
+ *
+ * Images cost roughly a token per 750 base64 chars once the provider encodes
+ * them; text costs the usual four chars per token. The difference is large —
+ * a megabyte photo is a couple of thousand tokens, not three hundred
+ * thousand — so anything estimating cost has to use this rather than raw
+ * character counts. Exported for exactly that reason: the composer's
+ * preflight needs the same answer the guard gets.
+ */
+export function attachmentTokens(attachments: Attachment[] = []): number {
+  return attachments.reduce((n, a) => n + Math.ceil(a.data.length / (a.kind === "image" ? 750 : 4)), 0);
+}
+
 function contextTokens(history: HistoryTurn[], userMessage: string, attachments: Attachment[] = []): number {
   const chars = history.reduce((n, t) => n + t.content.length, 0) + userMessage.length;
-  const attachmentTokens = attachments.reduce(
-    // Images cost roughly a token per 750 base64 chars once encoded by the
-    // provider; text attachments cost the usual ~4 chars per token.
-    (n, a) => n + Math.ceil(a.data.length / (a.kind === "image" ? 750 : 4)),
-    0
-  );
-  return estimateTokens(chars) + attachmentTokens;
+  return estimateTokens(chars) + attachmentTokens(attachments);
 }
 
 /**

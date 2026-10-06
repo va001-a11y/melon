@@ -12,7 +12,7 @@
  */
 
 export type { RunSink } from "./orchestrator.js";
-export { runConversation } from "./orchestrator.js";
+export { attachmentTokens, runConversation } from "./orchestrator.js";
 
 export * from "./types.js";
 

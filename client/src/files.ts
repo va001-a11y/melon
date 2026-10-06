@@ -12,6 +12,18 @@ const TEXT_EXTENSIONS = new Set([
 /** 4 MB keeps a single attachment from blowing the context window. */
 export const MAX_FILE_BYTES = 4 * 1024 * 1024;
 
+/**
+ * How many files may ride on one message.
+ *
+ * High on purpose. Three, which some tools impose, is a limit you meet while
+ * doing something reasonable; fifty is one you only meet by accident — a
+ * select-all in the wrong folder, or a drop of a whole directory. The real
+ * ceiling is the context window, and the guard enforces that honestly; this
+ * only stops the UI being handed a thousand chips and the browser being
+ * asked to read them all.
+ */
+export const MAX_ATTACHMENTS = 50;
+
 export type FileKind = "image" | "text" | "pdf" | "unsupported";
 
 export function classify(file: File): FileKind {
