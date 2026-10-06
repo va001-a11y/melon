@@ -137,6 +137,12 @@ For the hosted version this means something worth stating outright: **using it i
 
 **If that matters to you, run it from source.** Clone the repository, read what you are about to run, and start it yourself. Then the only parties are you and your model provider, which is the arrangement the rest of this section describes.
 
+**The rule that follows from this: nothing else gets published to that origin.** Other projects go on a separate account, an organisation, or their own domain. Browser storage cannot tell one page on an origin from another, so a second site there would sit next to Melon's keys whether or not anyone intended it to.
+
+And if something else ever does share the origin, the narrower rule is **no third-party scripts on it**. A third-party script is a `<script src="…">` pointing at a domain you do not control — analytics, a chat widget, a comment system, an ad tag, a library pulled from a CDN. It runs *inside* the page rather than in a sandbox, so it can read everything the page can, including another site's stored keys. It does not need to be malicious to be a problem; it needs only to be compromised once. The same applies, less visibly, to an npm package bundled into a build: after bundling it is indistinguishable from your own code and has the same access. An `<iframe>` is different — it runs in its own origin and cannot reach your storage.
+
+Melon itself loads nothing external. Its page references its own bundle and nothing else: no analytics, no CDN libraries, no web fonts. Every network request the app makes goes either to the model provider you chose or to your own machine.
+
 The desktop row is the same property with a different neighbour: `127.0.0.1:5173` is Vite's default port, so another project of your own could share that storage. Melon pins its port deliberately — moving it would change the origin and make every saved chat, agent and key vanish, which is a worse outcome than the risk.
 
 
