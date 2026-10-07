@@ -27,6 +27,7 @@ import {
   pruneUnusedSources,
   runWebSearch,
   searchQueryFor,
+  worthSearching,
 } from "./search.js";
 import { ollamaMaxContext } from "./providers/ollama.js";
 import type { Citation } from "./types.js";
@@ -414,6 +415,14 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
        */
       let searchContext = "";
       let searchCitations: Citation[] | undefined;
+      /*
+       * Whether a search actually ran, which is not the same as whether the
+       * user asked for one. The card words its warning differently for "the
+       * model searched and cited nothing" and "no search happened", so
+       * reporting the toggle instead of the fact would put the blame in the
+       * wrong place.
+       */
+      let didSearch = false;
       if (agent.webSearch === true && round === 0) {
         const def = getProvider(agent.provider);
         const searchesItself = webSearchBlockReason(def, agent.model) === null;
@@ -433,9 +442,18 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
                 `Add one in Settings → Web search, or turn search off for this agent.`
             );
           }
-          const shared = await searchOnce(engine.id, searchKey);
-          searchContext = shared.context;
-          searchCitations = shared.citations;
+          /*
+           * Only spend a search when there is something to look up. The
+           * query already carries the previous question, so a real follow-up
+           * passes; a bare "hello" does not, and used to return five pages
+           * about databases and TLS.
+           */
+          if (worthSearching(searchQueryFor(req.history, req.userMessage))) {
+            const shared = await searchOnce(engine.id, searchKey);
+            searchContext = shared.context;
+            searchCitations = shared.citations;
+            didSearch = true;
+          }
         }
       }
 
@@ -552,7 +570,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
          * Without this, "no sources" is ambiguous — and the ambiguity hides
          * the dangerous case, where a model invents specifics unchecked.
          */
-        searched: agent.webSearch === true,
+        searched: agent.webSearch === true && (didSearch || result.citations !== undefined),
       });
     } catch (err: unknown) {
       tokenGuard.settleInflight(streamedChars);

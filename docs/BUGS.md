@@ -798,6 +798,35 @@ extracted folder to answer.
 
 ---
 
+### Melon searched the web for "hello"
+
+`2026-10-07` - spotted in a screenshot of a working local-model run. The
+first reply's sources were *Build an Access database to share on the Web*,
+*Hello Query | Heroku Dev Center*, and *Encrypted Client Hello — Cloudflare*.
+The message had been "hello".
+
+Search ran whenever the toggle was on, without ever asking whether there was
+anything to look up. Three costs, all real: one of a thousand monthly
+searches spent on a greeting, five irrelevant pages pushed into the context
+where they can only hurt the answer, and about twenty-five seconds of prompt
+evaluation on a local model reading them.
+
+`worthSearching` now gates it. The query it judges already has the previous
+question folded in, so a genuine short follow-up — "why?" — carries its
+subject and passes; only a message with nothing in it at all is skipped.
+
+**The trade-off, chosen deliberately:** a greeting sent *mid-conversation*
+still searches, because the folded query contains the earlier question. Gating
+on the typed message alone would fix that and would also skip "why?" — which
+is the dangerous direction, since that is a real question being answered
+without sources. Wasting one search in a thousand is the cheaper mistake.
+
+`searched` is also reported honestly now. It used to echo the toggle, so a
+skipped search would have made the card say the model "had the chance and
+took none" — blaming the model for Melon's decision.
+
+---
+
 ### The cost preflight ignored attachments
 
 `2026-10-06` - found while answering a question about attachment limits,

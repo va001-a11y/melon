@@ -120,6 +120,49 @@ export function searchQueryFor(history: { role: string; content: string }[], use
   return trimQuery(prior ? `${userMessage} ${prior}` : userMessage);
 }
 
+/**
+ * Words that carry nothing to look up.
+ *
+ * Not a general stop-word list — "the" and "of" are dropped by every search
+ * engine anyway, and a query made only of them is vanishingly rare. These are
+ * the things people actually send on their own: a greeting, an
+ * acknowledgement, a test.
+ */
+const PLEASANTRIES = new Set([
+  "hello", "hi", "hey", "yo", "hiya", "greetings", "morning", "evening",
+  "thanks", "thank", "you", "ty", "cheers", "please", "sorry",
+  "ok", "okay", "k", "sure", "cool", "nice", "great", "good", "fine",
+  "yes", "no", "yep", "nope", "yeah", "nah",
+  "lol", "haha", "test", "testing", "ping", "hmm", "um",
+]);
+
+/**
+ * Is there anything in this query worth spending a search on?
+ *
+ * Melon searched whenever the toggle was on, without asking whether there
+ * was anything to look up. "hello" returned five pages about Access
+ * databases and TLS handshakes — one of a thousand monthly searches spent,
+ * and five irrelevant pages pushed into the context where they could only
+ * hurt the answer. On a local model that also cost about 25 seconds of
+ * prompt evaluation.
+ *
+ * The query reaching here already has the previous question folded in, so a
+ * genuine short follow-up — "why?" — carries its subject with it and passes.
+ * Only a message with nothing in it at all is skipped.
+ */
+export function worthSearching(query: string): boolean {
+  const words = query
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  // Measured across everything substantive rather than per word, so "2+2"
+  // — which punctuation-stripping leaves as two single characters — is not
+  // mistaken for an empty query.
+  const substantive = words.filter((w) => !PLEASANTRIES.has(w));
+  return substantive.join("").length >= 2;
+}
+
 export async function runWebSearch(args: WebSearchArgs): Promise<SearchHit[]> {
   const query = trimQuery(args.query);
   if (!query) return [];
