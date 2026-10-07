@@ -7,7 +7,7 @@ import { ROLES } from "./defaults";
 import { formatUsd } from "./cost";
 import type { Estimate } from "./cost";
 import { MAX_ATTACHMENTS, formatSize, prepareFile } from "./files";
-import { attachmentTokens } from "@melon/core";
+import { PROVIDERS, attachmentTokens } from "@melon/core";
 import { Markdown } from "./Markdown";
 
 interface Props {
@@ -226,6 +226,24 @@ function AgentCard({
 }) {
   const { cot, answer, reasoningInProgress } = splitCot(response.text, agentNames);
   const roleLabel = ROLES.find((r) => r.key === response.role)?.label ?? response.role;
+
+  const elapsedSeconds = response.startedAt ? Math.max(0, Math.round((now - response.startedAt) / 1000)) : 0;
+
+  /*
+   * "writing…" is a lie while a local model is still loading.
+   *
+   * Ollama reads the weights off disk and then reads the prompt before it
+   * emits a single token — on a large model without a GPU that is minutes,
+   * and a card reading "writing… 127s" with nothing underneath is
+   * indistinguishable from one that has hung. Melon knows better than that:
+   * nothing has arrived, and the provider is one that runs on this machine.
+   *
+   * It cannot tell loading from prompt-reading until the first token, so the
+   * word is "preparing" and the tooltip names both. The five-second delay
+   * keeps it off cards that were never going to be slow.
+   */
+  const isLocalModel = PROVIDERS.find((p) => p.id === response.provider)?.group === "Local";
+  const preparing = response.status === "streaming" && !response.text && isLocalModel && elapsedSeconds >= 5;
   const [flagged, setFlagged] = useState(false);
   const [copied, setCopied] = useState<"no" | "yes" | "failed">("no");
   const [noteDismissed, setNoteDismissed] = useState(false);
@@ -290,9 +308,22 @@ function AgentCard({
           </span>
         )}
         <span className="card-role">{roleLabel}</span>
-        <span className="card-status">
+        <span
+          className="card-status"
+          title={
+            preparing
+              ? "A local model loads into memory and reads the prompt before it writes anything. " +
+                "The first request after a pause is the slowest, and a large model on a machine without a GPU " +
+                "can take minutes."
+              : undefined
+          }
+        >
           {response.status === "streaming" &&
-            (response.startedAt ? `writing… ${Math.max(0, Math.round((now - response.startedAt) / 1000))}s` : "writing…")}
+            (preparing
+              ? `preparing… ${elapsedSeconds}s`
+              : response.startedAt
+                ? `writing… ${elapsedSeconds}s`
+                : "writing…")}
           {response.status === "pending" &&
             (pacing ? "paused to slow spending" : waitingFor ? `waiting for ${waitingFor}` : "waiting")}
           {response.status === "stopped" && "⏹ stopped"}

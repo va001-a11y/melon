@@ -446,6 +446,7 @@ export default function App() {
             name: a.name,
             color: a.color,
             role: a.role,
+            provider: a.provider,
             text: "",
             status: "pending",
             // Stored on the reply itself so a reopened chat still shows which

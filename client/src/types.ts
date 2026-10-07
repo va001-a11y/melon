@@ -178,6 +178,12 @@ export interface AgentResponse {
   usage?: Usage;
   /** When this agent began, so the UI can show how long a wait has lasted. */
   startedAt?: number;
+  /**
+   * Which provider answered. Stored on the reply so a card can say something
+   * true about waiting — a local model behaves differently from a hosted one
+   * before its first token.
+   */
+  provider?: string;
   /** Pipeline stage this reply came from, recorded so old chats still show it. */
   team?: number;
   teamName?: string;
