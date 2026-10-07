@@ -60,17 +60,32 @@ jobs:
       - name: Install Ollama on the runner
         run: |
           curl -fsSL https://ollama.com/install.sh | sh
-          # Ollama defaults to 127.0.0.1, which REFUSES connections arriving
-          # from a container through the host gateway -- they do not come
-          # from loopback. That is the commonest reason a containerised app
-          # cannot see a local Ollama, so the test binds the way a working
-          # setup has to, and the README tells users to do the same.
-          OLLAMA_HOST=0.0.0.0:11434 nohup ollama serve > /tmp/ollama.log 2>&1 &
+          # The installer registers a systemd service and starts it, so an
+          # Ollama already holds port 11434 bound to 127.0.0.1 -- which
+          # REFUSES connections arriving from a container through the host
+          # gateway, since those do not come from loopback. A second
+          # `ollama serve` cannot fix that: it dies on the taken port while a
+          # curl to 127.0.0.1 still succeeds against the first one, so the
+          # bind looks corrected and is not. That mistake cost a CI run.
+          #
+          # What follows is verbatim the Linux procedure the README gives
+          # users, so the documented fix is what gets tested.
+          CONF=/etc/systemd/system/ollama.service.d
+          sudo mkdir -p $CONF
+          echo '[Service]' | sudo tee $CONF/override.conf
+          echo 'Environment="OLLAMA_HOST=0.0.0.0:11434"' | sudo tee -a $CONF/override.conf
+          sudo systemctl daemon-reload
+          sudo systemctl restart ollama
           for i in $(seq 1 30); do
             curl -fsS http://127.0.0.1:11434/api/tags >/dev/null && break
             sleep 1
           done
-          curl -fsS http://127.0.0.1:11434/api/tags >/dev/null && echo "Ollama is up"
+          # Assert the bind instead of assuming it. A listener on 127.0.0.1
+          # answers the curl above perfectly while staying invisible to a
+          # container, which is the entire failure being guarded against.
+          ss -ltn | grep 11434
+          ss -ltn | grep -qF -e '0.0.0.0:11434' -e '*:11434'
+          echo "Ollama is listening on all interfaces"
 
       # Small enough to pull in seconds. What is under test is the network
       # path and Melon's parsing of the model list, not the model.
@@ -102,6 +117,9 @@ jobs:
       # a real Ollama out on the host and reading its model list back.
       - name: Check the container can see Ollama on the host
         run: |
+          # Separate the network from the app: if this line fails it is
+          # Docker or the bind, and nothing to do with Melon's own probing.
+          docker exec melon-ci node -e "fetch('http://host.docker.internal:11434/api/tags').then(r => r.text()).then(t => console.log('reached Ollama from inside the container:', t.slice(0, 120)))"
           curl -fsS http://127.0.0.1:8080/api/detect-local > /tmp/detect.json
           cat /tmp/detect.json
           echo
@@ -116,7 +134,7 @@ jobs:
 
       - name: Ollama logs
         if: always()
-        run: tail -40 /tmp/ollama.log || true
+        run: sudo journalctl -u ollama --no-pager -n 40 || true
 
       - name: Container logs
         if: always()
