@@ -22,6 +22,9 @@ Melon-*.zip
 *.key
 *.pem
 
+# Assistant tooling: a scratch launch config, not part of the project.
+.claude/
+
 # Editor / OS noise
 .vscode/
 .idea/
