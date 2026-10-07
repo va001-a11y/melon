@@ -815,6 +815,18 @@ evaluation on a local model reading them.
 question folded in, so a genuine short follow-up — "why?" — carries its
 subject and passes; only a message with nothing in it at all is skipped.
 
+**On the list never being complete:** it is not meant to be. A message is
+skipped only when *every* word in it is a pleasantry, so an unlisted greeting
+— "ookay", "wagwan" — searches, costing one of a thousand. A search-worthy
+message cannot be wrongly skipped unless it contains no substantive word at
+all. The expensive mistake is structurally unavailable; only the cheap one is
+reachable.
+
+One rule does more than the list, though: runs of three or more identical
+letters collapse, so "heyyyy", "hellooo" and "yooo" all reduce to words that
+are already there. No English word repeats a letter three times, so it is
+safe, and it covers a family of spellings no list could enumerate.
+
 **The trade-off, chosen deliberately:** a greeting sent *mid-conversation*
 still searches, because the folded query contains the earlier question. Gating
 on the typed message alone would fix that and would also skip "why?" — which

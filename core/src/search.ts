@@ -129,11 +129,30 @@ export function searchQueryFor(history: { role: string; content: string }[], use
  * acknowledgement, a test.
  */
 const PLEASANTRIES = new Set([
-  "hello", "hi", "hey", "yo", "hiya", "greetings", "morning", "evening",
-  "thanks", "thank", "you", "ty", "cheers", "please", "sorry",
-  "ok", "okay", "k", "sure", "cool", "nice", "great", "good", "fine",
-  "yes", "no", "yep", "nope", "yeah", "nah",
-  "lol", "haha", "test", "testing", "ping", "hmm", "um",
+  // Greetings, including the ones people actually type
+  "hello", "hullo", "hi", "hiya", "hey", "heya", "yo", "ayo", "sup", "wassup",
+  "whatsup", "howdy", "oi", "greetings", "morning", "afternoon", "evening",
+  "night", "gm", "gn", "wyd", "hru",
+  // Thanks and apologies
+  "thanks", "thank", "thx", "tysm", "ty", "you", "cheers", "please", "sorry",
+  "np", "yw", "welcome",
+  // Acknowledgements
+  "ok", "okay", "k", "kk", "sure", "cool", "nice", "great", "good", "fine",
+  "alright", "right", "gotcha", "got", "it", "understood", "noted", "agreed",
+  "indeed", "true", "fair",
+  // Affirmation and negation
+  "yes", "no", "yep", "yup", "ya", "yeah", "yea", "nope", "nah", "mhm", "mm",
+  // Noises and filler
+  "lol", "lmao", "haha", "hah", "hmm", "hm", "um", "uh", "huh", "oh", "ah",
+  "anyway", "whatever", "nvm", "nevermind", "idk",
+  // The other halves of common phrases: "no worries", "fair enough",
+  // "of course", "cheers mate". Each is harmless on its own, because a
+  // message is only skipped when EVERY word in it is on this list.
+  "so", "of", "course", "mate", "worries", "worry", "problem", "enough", "out",
+  // Farewells
+  "bye", "goodbye", "cya", "ttyl", "later", "peace",
+  // Checking the thing works
+  "test", "testing", "ping", "hello?",
 ]);
 
 /**
@@ -154,6 +173,10 @@ export function worthSearching(query: string): boolean {
   const words = query
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    // "heyyyy" and "hellooo" are the same words with the enthusiasm left in.
+    // No English word repeats a letter three times, so collapsing runs is
+    // safe and catches a whole family of spellings no list could hold.
+    .replace(/(\p{L})\1{2,}/gu, "$1")
     .split(/\s+/)
     .filter(Boolean);
   // Measured across everything substantive rather than per word, so "2+2"
