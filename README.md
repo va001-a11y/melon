@@ -61,6 +61,14 @@ extra_hosts:
 
 Docker Desktop on Windows and macOS defines that name already; the `extra_hosts` line is what makes it work on plain Linux too. If Ollama is on a *different* machine, put its address there instead.
 
+**You will probably also have to change something on Ollama's side.** Ollama listens on `127.0.0.1` only, and a request arriving from a container does not come from loopback — so Ollama refuses it, and Melon reports Ollama as unreachable while it is plainly running. This is the commonest reason a containerised app cannot see a local Ollama. Tell Ollama to accept the host's other addresses:
+
+- **Windows:** set an environment variable `OLLAMA_HOST` to `0.0.0.0`, then restart Ollama.
+- **macOS:** `launchctl setenv OLLAMA_HOST "0.0.0.0"`, then restart Ollama.
+- **Linux:** `sudo systemctl edit ollama`, add `Environment="OLLAMA_HOST=0.0.0.0"`, then `sudo systemctl restart ollama`.
+
+Be aware of what that does: Ollama has no authentication, so anyone who can reach that port can use your models. On a home network that is usually fine; on shared or public wifi, firewall the port or leave Melon on the desktop launcher instead.
+
 This image runs the **server** build, not the hosted web build, and that is deliberate: the hosted build runs everything inside the page, where it cannot reach a local Ollama. Here the model requests leave the server process, so local runtimes work and no cross-origin rules apply.
 
 ## Features

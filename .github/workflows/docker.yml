@@ -50,9 +50,39 @@ jobs:
       # Building only proves it compiles. This proves it runs: a broken
       # entrypoint, a file missed by the runtime stage, or a server that binds
       # the wrong address would all still build perfectly green.
+      # Melon's reason to exist in a container is talking to a local model,
+      # and that is the one thing the image cannot prove on its own: the
+      # request has to cross back out of the container to the host. So the
+      # runner becomes the host. It installs Ollama exactly as a user would,
+      # and the container reaches it exactly as it would on a real machine --
+      # same host-gateway mapping, same OLLAMA_HOST. Neither of the author's
+      # machines can run Docker, so without this nobody ever tests this path.
+      - name: Install Ollama on the runner
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          # Ollama defaults to 127.0.0.1, which REFUSES connections arriving
+          # from a container through the host gateway -- they do not come
+          # from loopback. That is the commonest reason a containerised app
+          # cannot see a local Ollama, so the test binds the way a working
+          # setup has to, and the README tells users to do the same.
+          OLLAMA_HOST=0.0.0.0:11434 nohup ollama serve > /tmp/ollama.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:11434/api/tags >/dev/null && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:11434/api/tags >/dev/null && echo "Ollama is up"
+
+      # Small enough to pull in seconds. What is under test is the network
+      # path and Melon's parsing of the model list, not the model.
+      - name: Pull a tiny model
+        run: ollama pull qwen2.5:0.5b
+
       - name: Run it and check it answers
         run: |
-          docker run -d --name melon-ci -p 8080:8080 melon:ci
+          docker run -d --name melon-ci -p 8080:8080 \
+            --add-host host.docker.internal:host-gateway \
+            -e OLLAMA_HOST=http://host.docker.internal:11434 \
+            melon:ci
           for i in $(seq 1 30); do
             curl -fsS http://127.0.0.1:8080/api/health >/dev/null && break
             sleep 1
@@ -67,6 +97,26 @@ jobs:
           # single-page fallback, or a typo would answer with HTML.
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/nope)" = "404" \
             && echo "API 404 intact"
+
+      # The payoff: Melon's own probe, running inside the container, finding
+      # a real Ollama out on the host and reading its model list back.
+      - name: Check the container can see Ollama on the host
+        run: |
+          curl -fsS http://127.0.0.1:8080/api/detect-local > /tmp/detect.json
+          cat /tmp/detect.json
+          echo
+          python3 - <<'PY'
+          import json
+          d = json.load(open("/tmp/detect.json"))
+          o = next(r for r in d["runtimes"] if r["id"] == "ollama")
+          assert o["found"], "container could not reach Ollama: %s" % d.get("diagnosis")
+          assert any("qwen2.5" in m for m in o["models"]), "model list empty: %s" % o
+          print("Container reached Ollama at", o["baseUrl"], "and sees", o["models"])
+          PY
+
+      - name: Ollama logs
+        if: always()
+        run: tail -40 /tmp/ollama.log || true
 
       - name: Container logs
         if: always()
