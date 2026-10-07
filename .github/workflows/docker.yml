@@ -1,0 +1,118 @@
+name: Container image
+
+# Two jobs, answering two different questions.
+#
+# `verify` proves the Dockerfile still builds AND still runs, on every push and
+# pull request. Melon is developed on a machine with no Docker on it, so CI is
+# the only thing that ever compiles this image — without this job a broken
+# Dockerfile would be discovered by whoever first tried to install Melon,
+# which is the worst possible moment to find out.
+#
+# `publish` runs only on a version tag and pushes the image to GitHub's own
+# container registry, so people can run Melon without cloning the repo.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  verify:
+    # A tag goes straight to publish, which builds the same image anyway.
+    if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v3
+
+      # This runner's architecture only. It is a correctness check, and
+      # emulated arm64 would multiply the time for no additional signal —
+      # publish covers the other architecture.
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: melon:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Building only proves it compiles. This proves it runs: a broken
+      # entrypoint, a file missed by the runtime stage, or a server that binds
+      # the wrong address would all still build perfectly green.
+      - name: Run it and check it answers
+        run: |
+          docker run -d --name melon-ci -p 8080:8080 melon:ci
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8080/api/health >/dev/null && break
+            sleep 1
+          done
+          echo "--- /api/health ---"
+          curl -fsS http://127.0.0.1:8080/api/health
+          # The interface has to be served too. Express coming up without the
+          # built client beside it would pass every check above.
+          echo "--- / ---"
+          curl -fsS http://127.0.0.1:8080/ | grep -q "<title>Melon" && echo "UI served"
+          # An unknown API path must 404 rather than being swallowed by the
+          # single-page fallback, or a typo would answer with HTML.
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/nope)" = "404" \
+            && echo "API 404 intact"
+
+      - name: Container logs
+        if: always()
+        run: docker logs melon-ci || true
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Lets the built-in GITHUB_TOKEN push to GHCR. No secret to create,
+      # store or rotate.
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      # arm64 is emulated on an x86 runner, which needs QEMU registered first.
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tag v0.4.2 publishes :0.4.2, :0.4 and :latest, so people can pin as
+      # loosely or as tightly as they want.
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # Raspberry Pis and Apple Silicon are both common in this audience,
+          # and both are arm64. Emulation makes it slow, which is acceptable
+          # on a tag but would not be on every push.
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

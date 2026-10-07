@@ -22,6 +22,47 @@ It checks for Node, installs dependencies on first run, reclaims any processes a
 npm install && npm run dev
 ```
 
+### Run it with Docker
+
+One container holds the whole app — the right Node version, the dependencies, the built interface. Nothing is installed on your system, and removing the container leaves nothing behind.
+
+```bash
+docker compose up -d
+```
+
+Melon is then at **http://localhost:8080**. `docker compose down` stops it; `docker compose up -d --build` rebuilds it after a `git pull`.
+
+Without compose:
+
+```bash
+docker build -t melon . && docker run -d -p 127.0.0.1:8080:8080 --name melon melon
+```
+
+**If that port is already taken**, Docker says so plainly and refuses to start:
+
+```
+Error: Bind for 127.0.0.1:8080 failed: port is already allocated
+```
+
+Change the **left-hand** number only — `"127.0.0.1:9000:8080"` in `docker-compose.yml` — and use http://localhost:9000. The right-hand number is Melon's own port inside the container, which has its own private network and can never clash with anything on your machine.
+
+**Then leave that number alone.** Browser storage is tied to the origin, and the origin includes the port, so changing it later makes every saved chat, agent and API key appear to have been deleted. They have not been — they are still under the old address — but there is no way to move them across.
+
+By default Melon listens on `127.0.0.1`, so only this machine can reach it. To use it from your phone or another computer, drop that prefix in `docker-compose.yml` so the line reads `"8080:8080"`. Think before you do: anyone who can reach that address can use your Melon.
+
+**Using Ollama from the container.** Ollama runs on your machine, not inside the container, so `localhost` from in there means the container itself. The compose file already points Melon at the host:
+
+```yaml
+environment:
+  OLLAMA_HOST: "http://host.docker.internal:11434"
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+
+Docker Desktop on Windows and macOS defines that name already; the `extra_hosts` line is what makes it work on plain Linux too. If Ollama is on a *different* machine, put its address there instead.
+
+This image runs the **server** build, not the hosted web build, and that is deliberate: the hosted build runs everything inside the page, where it cannot reach a local Ollama. Here the model requests leave the server process, so local runtimes work and no cross-origin rules apply.
+
 ## Features
 
 - **Unified API layer** — adapters for Anthropic, OpenAI (and any OpenAI-compatible endpoint via custom base URL: Groq, Mistral, Together, OpenRouter, llama.cpp, ...), Google Gemini, and local Ollama. All streaming, all BYOK — keys live in your browser's localStorage and are only sent to your own local server, never stored server-side.

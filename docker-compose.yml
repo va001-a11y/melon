@@ -1,0 +1,29 @@
+services:
+  melon:
+    build: .
+    image: melon:latest
+    container_name: melon
+    restart: unless-stopped
+    ports:
+      # Left side is the port on YOUR machine, right side is Melon's own port
+      # inside the container. Only the left side can clash with something else
+      # you are running; if Docker says "port is already allocated", change it
+      # to e.g. "127.0.0.1:9000:8080" and use http://localhost:9000.
+      #
+      # Then leave it alone. Browser storage is tied to the origin, and the
+      # origin includes the port — so moving it later makes every saved chat,
+      # agent and API key look deleted.
+      #
+      # 127.0.0.1 keeps Melon on this machine only. Drop it ("8080:8080") to
+      # reach Melon from your phone or another computer on your network.
+      - "127.0.0.1:8080:8080"
+    environment:
+      # Ollama runs on your machine, not in this container, so "localhost"
+      # here would mean the container itself. host.docker.internal is how a
+      # container addresses the machine hosting it. Melon reads OLLAMA_HOST
+      # when it probes for local runtimes.
+      OLLAMA_HOST: "http://host.docker.internal:11434"
+    extra_hosts:
+      # Docker Desktop (Windows/macOS) provides this name already. Plain
+      # Docker on Linux does not, so it has to be mapped explicitly.
+      - "host.docker.internal:host-gateway"

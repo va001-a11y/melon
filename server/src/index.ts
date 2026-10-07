@@ -3,11 +3,22 @@ import { sseSink } from "./sse.js";
 import type { AgentSpec, RunRequest } from "@melon/core";
 import { BUNDLES, COMPAT_PROVIDERS, HARD_AGENT_CAP, MODEL_REGISTRY, PROVIDERS, RECOMMENDED_AGENTS, analytics, resolveTarget, runConversation, stopController, tokenGuard } from "@melon/core";
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { listModels, testAgent } from "./models.js";
 
 // Deliberately not process.env.PORT: dev launchers set PORT for the
 // front-end and would collide the API server onto Vite's port.
 const PORT = Number(process.env.MELON_SERVER_PORT ?? 5175);
+/*
+ * Which address to listen on. 127.0.0.1 keeps Melon off the local network,
+ * which is the right default on a desktop. It is the wrong one inside a
+ * container, where loopback belongs to the container alone and a published
+ * port would still reach nothing — so the image sets MELON_BIND=0.0.0.0 and
+ * lets `docker run -p` decide who can actually connect.
+ */
+const BIND = process.env.MELON_BIND ?? "127.0.0.1";
 const app = express();
 // Attachments are base64 in the body, so this has to be generous: a 4 MB
 // file is ~5.5 MB encoded, and several can be sent at once.
@@ -173,6 +184,28 @@ app.post("/api/stop", (_req, res) => {
   res.json({ abortedRuns: aborted });
 });
 
+/*
+ * Serve the built UI when it is present, so one process is the whole app.
+ * The desktop flow never needs this (Vite serves the client on its own port
+ * and proxies /api here), but a container publishes a single port, and the
+ * client only ever calls /api/... relatively — so serving both from here
+ * works without the client knowing anything has changed.
+ */
+const CLIENT_DIST = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "client", "dist");
+if (existsSync(join(CLIENT_DIST, "index.html"))) {
+  app.use(express.static(CLIENT_DIST));
+  // Single-page app: a deep link is still index.html. API paths must fall
+  // through to Express's own 404 instead, or a mistyped endpoint would
+  // answer with HTML and surface as an unreadable JSON parse error.
+  app.use((req, res, next) => {
+    if (req.method !== "GET" || req.path.startsWith("/api/")) {
+      next();
+      return;
+    }
+    res.sendFile(join(CLIENT_DIST, "index.html"));
+  });
+}
+
 /**
  * Start listening, retrying briefly on EADDRINUSE. During hot-reload the
  * previous process is often still releasing the port, so a few short retries
@@ -183,8 +216,8 @@ function start(attempt = 1): void {
   // Bind to 127.0.0.1 explicitly rather than every interface: it keeps the
   // server off the local network, and matches the address the client proxies
   // to, avoiding the IPv4/IPv6 "localhost" mismatch on Windows.
-  const server = app.listen(PORT, "127.0.0.1", () => {
-    console.log(`Melon server listening on http://127.0.0.1:${PORT}`);
+  const server = app.listen(PORT, BIND, () => {
+    console.log(`Melon server listening on http://${BIND}:${PORT}`);
   });
 
   server.on("error", (err: NodeJS.ErrnoException) => {

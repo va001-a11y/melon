@@ -1,0 +1,15 @@
+# Everything here is either rebuilt inside the image or has no business in it.
+node_modules
+**/node_modules
+**/dist
+.git
+.github
+.claude
+docs
+*.zip
+.melon-ports.json
+.env
+.env.*
+Dockerfile
+.dockerignore
+docker-compose.yml
