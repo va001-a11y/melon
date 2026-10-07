@@ -2,6 +2,8 @@
 
 Universal multi-model AI: bring your own keys, activate the models you want, and let them work through a question **together** — taking turns and building on each other, not shouting over each other. A **Stop** button next to Send kills all activity instantly.
 
+![Three agents answering one question in turn, each reading the ones before it](docs/img/melon-relay.jpg)
+
 ### ▶ Try it now — [va001-a11y.github.io/melon](https://va001-a11y.github.io/melon/)
 
 Nothing to install. Pick **Melon demo (no key)** and watch two models take turns, or paste your own provider key. Everything runs in your browser: there is no Melon server, and your keys go straight from your browser to the provider you chose.
