@@ -132,6 +132,59 @@ jobs:
           print("Container reached Ollama at", o["baseUrl"], "and sees", o["models"])
           PY
 
+      # Everything above proves Melon STARTS. This proves Melon WORKS: a
+      # message in, a generated answer out, through the orchestrator running
+      # in the container and a model running on the host. It also exercises
+      # the dynamic num_ctx path, which asks the model /api/show first.
+      - name: Hold a real conversation through the container
+        run: |
+          cat > /tmp/run.json <<'JSON'
+          {
+            "userMessage": "Reply with exactly the word BANANA and nothing else.",
+            "history": [],
+            "agents": [
+              {
+                "id": "ci",
+                "name": "CI",
+                "provider": "ollama",
+                "model": "qwen2.5:0.5b",
+                "baseUrl": "http://host.docker.internal:11434",
+                "role": "generalist"
+              }
+            ],
+            "settings": {
+              "mode": "professional",
+              "detailedCoT": false,
+              "maxOutputTokens": 64,
+              "sessionOutputBudget": 0,
+              "discussionMode": "single"
+            }
+          }
+          JSON
+          curl -fsS -N --max-time 300 -X POST http://127.0.0.1:8080/api/run \
+            -H 'content-type: application/json' \
+            --data @/tmp/run.json > /tmp/run.sse
+          echo "--- events received ---"
+          grep '^event: ' /tmp/run.sse | sort | uniq -c
+          python3 - <<'PY'
+          import json
+          events, data = [], []
+          for line in open("/tmp/run.sse", encoding="utf-8"):
+              line = line.rstrip()
+              if line.startswith("event: "):
+                  events.append(line[7:])
+              elif line.startswith("data: "):
+                  data.append(line[6:])
+          pairs = list(zip(events, data))
+          errs = [d for e, d in pairs if e in ("agent-error", "error")]
+          assert not errs, "the run reported an error: %s" % errs
+          assert "token" in events, "nothing streamed; events were %s" % sorted(set(events))
+          assert "agent-done" in events, "the agent never finished: %s" % sorted(set(events))
+          reply = "".join(json.loads(d).get("text", "") for e, d in pairs if e == "token")
+          assert reply.strip(), "tokens arrived but the reply was empty"
+          print("The model replied:", repr(reply.strip()[:200]))
+          PY
+
       - name: Ollama logs
         if: always()
         run: sudo journalctl -u ollama --no-pager -n 40 || true
