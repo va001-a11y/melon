@@ -1,7 +1,15 @@
 services:
   melon:
+    # Built from this checkout. Compose is deliberately not given an `image:`
+    # name here: with one, it tries to PULL that name from Docker Hub before
+    # building, fails (it was never published there) and prints a red
+    # "pull access denied" line before quietly building anyway. Nothing is
+    # wrong when that happens, but it reads as a failure on a first run.
+    #
+    # Once a release is published, you can skip building altogether by
+    # deleting the `build:` line above and using the prebuilt image:
+    #   image: ghcr.io/va001-a11y/melon:latest
     build: .
-    image: melon:latest
     container_name: melon
     restart: unless-stopped
     ports:

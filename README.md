@@ -63,9 +63,13 @@ Docker Desktop on Windows and macOS defines that name already; the `extra_hosts`
 
 **You will probably also have to change something on Ollama's side.** Ollama listens on `127.0.0.1` only, and a request arriving from a container does not come from loopback — so Ollama refuses it, and Melon reports Ollama as unreachable while it is plainly running. This is the commonest reason a containerised app cannot see a local Ollama. Tell Ollama to accept the host's other addresses:
 
-- **Windows:** set an environment variable `OLLAMA_HOST` to `0.0.0.0`, then restart Ollama.
+- **Windows:** set a user environment variable `OLLAMA_HOST` to `0.0.0.0`, then quit Ollama **completely** — right-click its system-tray icon and choose Quit. Closing its window is not enough; the background process keeps running with the old setting, and that is what makes this change appear not to work. If it will not let go, `taskkill /F /IM "ollama app.exe"` then `taskkill /F /IM ollama.exe`, and start it again from the Start menu. Windows will ask about the firewall the first time Ollama binds beyond loopback — allow it on **private networks only**.
 - **macOS:** `launchctl setenv OLLAMA_HOST "0.0.0.0"`, then restart Ollama.
 - **Linux:** `sudo systemctl edit ollama`, add `Environment="OLLAMA_HOST=0.0.0.0"`, then `sudo systemctl restart ollama`.
+
+**Check it rather than assuming it.** On Windows run `netstat -an | findstr 11434`, elsewhere `ss -ltn | grep 11434`. You want `0.0.0.0:11434` (and `[::]:11434`, which is the same thing over IPv6). If it still says `127.0.0.1:11434`, the change has not taken effect and the container will be refused.
+
+On Windows, do **not** check with `echo $env:OLLAMA_HOST`. Any terminal that was already open — including a new tab in a running Windows Terminal — inherited the old environment and will report the variable missing while it is saved perfectly well. To read what is actually stored, use `[Environment]::GetEnvironmentVariable("OLLAMA_HOST", "User")`.
 
 Be aware of what that does: Ollama has no authentication, so anyone who can reach that port can use your models. On a home network that is usually fine; on shared or public wifi, firewall the port or leave Melon on the desktop launcher instead.
 
