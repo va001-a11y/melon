@@ -6,8 +6,8 @@ services:
     # "pull access denied" line before quietly building anyway. Nothing is
     # wrong when that happens, but it reads as a failure on a first run.
     #
-    # Once a release is published, you can skip building altogether by
-    # deleting the `build:` line above and using the prebuilt image:
+    # To skip building altogether, delete the `build:` line below and use
+    # the published image instead:
     #   image: ghcr.io/va001-a11y/melon:latest
     build: .
     container_name: melon

@@ -26,17 +26,24 @@ npm install && npm run dev
 
 One container holds the whole app — the right Node version, the dependencies, the built interface. Nothing is installed on your system, and removing the container leaves nothing behind.
 
+**The image is published, so you do not need this repository at all:**
+
+```bash
+docker run -d -p 127.0.0.1:8080:8080 \
+  --add-host host.docker.internal:host-gateway \
+  -e OLLAMA_HOST=http://host.docker.internal:11434 \
+  --name melon ghcr.io/va001-a11y/melon:latest
+```
+
+Melon is then at **http://localhost:8080**. Images are built for `amd64` and `arm64`, so a Raspberry Pi or Apple Silicon works the same way.
+
+To build it from this checkout instead — which is what you want if you are changing anything:
+
 ```bash
 docker compose up -d
 ```
 
-Melon is then at **http://localhost:8080**. `docker compose down` stops it; `docker compose up -d --build` rebuilds it after a `git pull`.
-
-Without compose:
-
-```bash
-docker build -t melon . && docker run -d -p 127.0.0.1:8080:8080 --name melon melon
-```
+`docker compose down` stops it; `docker compose up -d --build` rebuilds after a `git pull`.
 
 **If that port is already taken**, Docker says so plainly and refuses to start:
 
