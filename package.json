@@ -1,7 +1,7 @@
 {
   "name": "melon",
   "private": true,
-  "version": "0.4.1",
+  "version": "0.5.0",
   "license": "MIT",
   "description": "Melon — universal multi-model AI",
   "workspaces": [
