@@ -152,6 +152,80 @@ export const openai: ProviderAdapter = {
       await handlers.onToken(close);
     };
 
+    /*
+     * The other convention: no reasoning field at all, with the thinking
+     * wrapped in <think>...</think> inside the ordinary content stream.
+     * DeepSeek R1 and its distills, QwQ and Qwen3 all do this, reaching
+     * Melon through Groq, LM Studio, llama.cpp and anything else speaking
+     * this wire format. Unhandled, the tags and everything between them are
+     * rendered as the answer.
+     *
+     * Two things make this harder than a replace(). The tags can be split
+     * across chunks -- "<th" in one, "ink>" in the next -- so any tail that
+     * could still become a tag is held back rather than emitted. And
+     * <thinking> has to be matched before <think>, or it would be torn into
+     * a tag plus a stray "ing>".
+     */
+    const OPEN_TAGS = ["<thinking>", "<think>"];
+    const CLOSE_TAGS = ["</thinking>", "</think>"];
+    const LONGEST_TAG = 11;
+    let pending = "";
+    /** Distinguishes a <think> block from thinking that came from a field. */
+    let openedByTag = false;
+
+    /** Earliest tag in the buffer, preferring the longer of two at one spot. */
+    const firstTag = (hay: string, tags: string[]) => {
+      let index = -1;
+      let tag = "";
+      for (const t of tags) {
+        const i = hay.indexOf(t);
+        if (i !== -1 && (index === -1 || i < index || (i === index && t.length > tag.length))) {
+          index = i;
+          tag = t;
+        }
+      }
+      return { index, tag };
+    };
+
+    /** How much of the tail could still turn into a tag, so must wait. */
+    const heldBack = (hay: string, tags: string[]) => {
+      for (let k = Math.min(hay.length, LONGEST_TAG - 1); k > 0; k--) {
+        const tail = hay.slice(hay.length - k);
+        if (tags.some((t) => t.startsWith(tail))) return k;
+      }
+      return 0;
+    };
+
+    /** Markers already delimit the sections, so both kinds go out the same way. */
+    const emit = async (chunk: string) => {
+      if (!chunk) return;
+      text += chunk;
+      await handlers.onToken(chunk);
+    };
+
+    const emitContent = async (chunk: string, flush = false) => {
+      pending += chunk;
+      for (;;) {
+        const looking = inThinking && openedByTag ? CLOSE_TAGS : OPEN_TAGS;
+        const { index, tag } = firstTag(pending, looking);
+        if (index === -1) break;
+        await emit(pending.slice(0, index));
+        pending = pending.slice(index + tag.length);
+        if (inThinking && openedByTag) {
+          await closeThinking();
+          openedByTag = false;
+        } else {
+          await openThinking();
+          openedByTag = true;
+        }
+      }
+      const looking = inThinking && openedByTag ? CLOSE_TAGS : OPEN_TAGS;
+      const hold = flush ? 0 : heldBack(pending, looking);
+      const ready = pending.slice(0, pending.length - hold);
+      pending = pending.slice(pending.length - hold);
+      await emit(ready);
+    };
+
     for await (const data of readStreamLines(res.body!, "sse")) {
       if (data === "[DONE]") break;
       let event: any;
@@ -182,10 +256,11 @@ export const openai: ProviderAdapter = {
 
       const delta = d?.content;
       if (typeof delta === "string" && delta.length > 0) {
-        // The answer beginning is what ends the reasoning section.
-        await closeThinking();
-        text += delta;
-        await handlers.onToken(delta);
+        // Reasoning that arrived in a FIELD ends where the answer begins. A
+        // <think> block does not: it ends at its own closing tag, so it has
+        // to survive this.
+        if (inThinking && !openedByTag) await closeThinking();
+        await emitContent(delta);
       }
       /*
        * url_citation annotations. OpenRouter and OpenAI's search models both
@@ -216,6 +291,10 @@ export const openai: ProviderAdapter = {
         outputTokens = event.usage.completion_tokens ?? outputTokens;
       }
     }
+
+    // A tail held back as a possible tag never became one, so it is ordinary
+    // text and must not be swallowed.
+    await emitContent("", true);
 
     // Ran out of budget mid-thought, or the stream ended inside the reasoning
     // section: close it so the drawer is readable rather than left open.
