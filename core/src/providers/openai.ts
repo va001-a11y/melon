@@ -13,7 +13,7 @@ export const openai: ProviderAdapter = {
   id: "openai",
   label: "OpenAI-compatible",
   async chat(args: ProviderChatArgs): Promise<ProviderResult> {
-    const { model, apiKey, baseUrl, providerLabel, providerId, system, messages, maxOutputTokens, signal, handlers, webSearch } = args;
+    const { model, apiKey, baseUrl, providerLabel, providerId, system, messages, maxOutputTokens, signal, handlers, webSearch, detailedCoT } = args;
     const base = (baseUrl ?? "https://api.openai.com/v1").replace(/\/+$/, "");
     const requestUrl = `${base}/chat/completions`;
     let url = requestUrl;
@@ -57,6 +57,25 @@ export const openai: ProviderAdapter = {
      */
     if (webSearch && providerId === "openrouter") {
       body.plugins = [{ id: "web" }];
+    }
+
+    /*
+     * Reasoning, for the providers that can be told not to do it. Melon can
+     * separate thinking from an answer when it arrives in a reasoning field,
+     * but some models deliberate in the ordinary content stream instead,
+     * where nothing distinguishes it from the reply. One Nemotron answer
+     * spent its entire output budget narrating its own compliance checks and
+     * was cut off before saying anything to the user.
+     *
+     * OpenRouter normalises each model's own switch behind this one
+     * parameter, which covers families controlled by a system-prompt
+     * directive as well as those with an API flag. Sent only when the user
+     * has Detailed CoT off, and only to OpenRouter: `reasoning` is their
+     * extension, not part of the shared wire format. This is the counterpart
+     * of the `think: false` the Ollama adapter already sends.
+     */
+    if (providerId === "openrouter" && detailedCoT === false) {
+      body.reasoning = { enabled: false };
     }
 
     const headers: Record<string, string> = { "content-type": "application/json" };
