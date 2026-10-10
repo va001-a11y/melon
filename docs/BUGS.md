@@ -915,6 +915,61 @@ makes the project more trustworthy rather than less.
 
 ---
 
+## After v0.5.0 (2026-10-10)
+
+### The model reasoned instead of answering, and nothing could tell
+
+**Nemotron 3.5 Lightning via OpenRouter, Show Reasoning off.** The reply was
+the model's own deliberation — *"Here's a thinking process: 1. Analyze User
+Input... 2. Identify Role/Constraints..."* — reciting Melon's system-prompt
+rules back at the user, then running out of output budget mid-sentence. The
+reply was `494/400 tok`: the entire allowance went on narrating compliance
+checks, and no answer was ever produced.
+
+Melon does separate thinking from answers, but only when thinking arrives in
+a reasoning field. The OpenAI adapter reads `reasoning_content` (DeepSeek)
+and `reasoning` (OpenRouter) and wraps both in the CoT markers, so the
+drawer hides them when the toggle is off. This model used neither: the raw
+reply had no `<think>` tags and no markers, just prose in the ordinary
+content stream.
+
+**Nothing downstream could have caught it.** Content is content; a heuristic
+that guessed which prose was "thinking" would eventually hide a real answer.
+The only place to fix it is before it is generated.
+
+The Ollama adapter had sent `think: false` on exactly this condition for
+some time. The OpenAI adapter — which speaks for a dozen services — never
+destructured `detailedCoT` at all, so the user's preference was dropped for
+every one of them. It now sends OpenRouter's `reasoning: { enabled: false }`,
+gated on the catalog id since that parameter is their extension rather than
+part of the shared wire format.
+
+**The lesson is about asymmetry between adapters.** Two adapters implemented
+the same user-facing toggle, one honoured it and one ignored it, and nothing
+compared them. A setting that exists in `ProviderChatArgs` is not a setting
+that is used.
+
+---
+
+### A Docker image that built perfectly and could not start
+
+`npm ci --omit=dev` prunes by the **lockfile's** `dev` flag, not by what
+package.json currently says. `tsx` was moved into `dependencies` without
+running `npm install --package-lock-only`, so the lockfile still marked it
+`"dev": true`. The build stage runs a plain `npm ci` and kept it, so the
+image **built green**; the runtime stage pruned it, so `npm start` found no
+tsx and the container exited immediately.
+
+A CI job that stopped at a successful build would have published an image
+that cannot run. It was caught only because the workflow starts the
+container and curls it.
+
+**The rule:** after moving a dependency between sections, regenerate the
+lockfile before trusting `--omit=dev`. And never treat a successful build as
+evidence that the thing runs.
+
+---
+
 ## Testing notes that cost time to learn
 
 - **A `window.fetch` recorder does not see** dynamic `import()` or Worker
@@ -929,6 +984,15 @@ makes the project more trustworthy rather than less.
   rejects. Clipboard behaviour has to be tested with a real click.
 - **Browsers cache negative responses.** A 404 served during a broken moment
   persists after the fix; test on a fresh port or bypass the cache.
+- **`$env:VAR` lies on Windows.** Any terminal already open — including a new
+  tab in a running Windows Terminal — inherited the old environment and
+  reports a variable as missing when it is saved perfectly well. This sent a
+  live debugging session down the wrong path for several steps.
+  `[Environment]::GetEnvironmentVariable("NAME", "User")` reads what is
+  actually stored, from any window.
+- **Ollama's Linux installer already starts a systemd service**, so a second
+  `ollama serve` dies on the taken port while a readiness curl to 127.0.0.1
+  still passes against the first one. The bind looks corrected and is not.
 - **Verify scripted edits by grepping for the inserted text.** The single most
   expensive bug in this project came from trusting a script that reported
   success without having matched anything.
