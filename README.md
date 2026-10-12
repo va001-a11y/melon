@@ -141,7 +141,18 @@ Chats, agents, API keys, presets, teams and settings are saved in your **browser
 
 The catch worth knowing: browser storage is tied to the exact address, **including the port**. Melon therefore remembers the port it used (in `.melon-ports.json`) and reuses it every launch, so your data is always where you left it. If something else has taken that port, Melon moves to another one, tells you clearly that this session will look empty, and explains how to get back.
 
-Since it is browser storage, clearing your browsing data — or using a different browser — starts you fresh. Use **Presets → Export my agents** to keep a copy of a line-up you care about.
+Since it is browser storage, clearing your browsing data — or using a different browser — starts you fresh. That is also why deleting Melon's folder loses nothing: the code was in the folder, your data never was.
+
+**Settings → Backup and restore** writes the lot to one file: every chat, every agent, your presets, teams and settings. It is also how you move a chat history to another computer, which is otherwise impossible.
+
+There are two export buttons, and the difference matters:
+
+- **Export without API keys** — safe to keep anywhere, copy between machines, or attach to a bug report. Your keys are stripped, and so is anything hidden in a custom base URL. You re-enter the keys after restoring.
+- **Export with API keys** — asks you to confirm, names the file `melon-backup-CONTAINS-API-KEYS-<date>.json`, and puts a warning at the top of the file itself. **Treat that file exactly like a password.** Anyone who opens it can spend money on your accounts, so keep it off email, chat, shared drives and repositories, and delete it once you have restored from it.
+
+Restoring **replaces** everything currently in Melon rather than merging, and tells you what is in the file — how many chats and agents, and whether it holds keys — before you commit to it.
+
+**Presets → Export my agents** still exists for sharing a line-up with someone else; it never contains keys.
 
 ### Web search
 
