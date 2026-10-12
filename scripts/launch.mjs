@@ -195,6 +195,29 @@ async function clearStaleProcesses() {
 }
 
 /** Open a URL in the user's default browser, whichever one that is. */
+/**
+ * Resolve once something actually answers at `url`, or give up after
+ * `timeoutMs`. Used instead of guessing how long a dev server takes to bind:
+ * the guess is always wrong on a slow machine, where it opens the browser on
+ * a connection error, and always wasteful on a fast one.
+ */
+async function waitForHttp(url, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 1000);
+      // Any reply means it is listening; a 404 is as good as a 200 here.
+      await fetch(url, { signal: controller.signal });
+      clearTimeout(timer);
+      return true;
+    } catch {
+      if (Date.now() >= deadline) return false;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
+}
+
 function openBrowser(url) {
   // Failing to open a browser must never take the servers down with it —
   // the address is printed above, so the user can always click it.
@@ -267,20 +290,46 @@ async function main() {
     MELON_SERVER_PORT: String(serverPort),
   });
 
-  // Give Vite a moment to bind before the browser asks for the page.
-  const opener = setTimeout(() => openBrowser(url), 5000);
+  /*
+   * Wait for BOTH halves before opening the browser. The page alone is not
+   * enough: the client proxies /api to the server, so a tab opened while only
+   * Vite is up greets a first-time user with errors that fix themselves a
+   * moment later -- which looks like a broken install rather than a slow one.
+   */
+  let stopped = false;
+  const opener = { cancel: () => { stopped = true; } };
+  void (async () => {
+    const slowNotice = setTimeout(() => {
+      if (!stopped) say("  (still starting — this takes longer the first time)");
+    }, 4000);
+    const [page, api] = await Promise.all([
+      waitForHttp(url, 90000),
+      waitForHttp(`http://127.0.0.1:${serverPort}/api/health`, 90000),
+    ]);
+    clearTimeout(slowNotice);
+    if (stopped) return;
+    if (page && api) {
+      openBrowser(url);
+      return;
+    }
+    // Opening now would only show an error page, so say what happened instead.
+    say();
+    say(`  Melon is taking unusually long to start (${page ? "the server" : "the page"} is not`);
+    say(`  responding yet). Leave this window open and try ${url} in a moment.`);
+    say();
+  })();
 
   // Take the servers down with us, so we do not create the very leftovers
   // this launcher has to clean up next time.
   const shutdown = () => {
-    clearTimeout(opener);
+    opener.cancel();
     if (!dev.killed) dev.kill();
     process.exit(0);
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
   dev.on("close", (code) => {
-    clearTimeout(opener);
+    opener.cancel();
     say();
     say("  Melon has stopped.");
     process.exit(code ?? 0);
