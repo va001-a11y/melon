@@ -949,6 +949,20 @@ the same user-facing toggle, one honoured it and one ignored it, and nothing
 compared them. A setting that exists in `ProviderChatArgs` is not a setting
 that is used.
 
+**Confirmed fixed by the reporter**, 2026-10-12: with Show Reasoning off the
+same model answers directly in 53 output tokens and narrates nothing. With it
+on, it reasons, exhausts the 400-token reply limit and gets Melon's "it ran
+out of room while thinking" card — which is the designed behaviour, and the
+card doing its job.
+
+Worth recording what was nearly built instead. An interim report of "still
+not fixed" led to a theory that Nemotron's reasoning could only be switched
+by a magic string in the system prompt (`detailed thinking off`, `/no_think`)
+and so needed a per-model directive table. That was wrong, and the fix
+already shipped was working; the remaining symptom belonged to the separate
+bug below. **A bug report that arrives before a restart looks exactly like a
+failed fix.**
+
 ---
 
 ### A Docker image that built perfectly and could not start
@@ -967,6 +981,50 @@ container and curls it.
 **The rule:** after moving a dependency between sections, regenerate the
 lockfile before trusting `--omit=dev`. And never treat a successful build as
 evidence that the thing runs.
+
+---
+
+## After v0.6.0 (2026-10-12)
+
+### A model recited the protocol and cut its own answer in half
+
+Reported on apodex-1.1-mini through OpenRouter with Detailed CoT **on**. The
+answer rendered from the middle of a sentence — ``` ` then `<final answer>`. ```
+— followed by the rest of the deliberation and two further `===ANSWER===`
+markers, with the real answer at the bottom.
+
+`===REASONING===` and `===ANSWER===` are in-band signalling: they travel in
+the same channel as the payload. So a model that recites the format it was
+given puts a second copy of both inside its own reasoning, and `splitCot`
+took the **first** end-marker, which was the quoted one.
+
+**The obvious fix would not have worked, and only the raw text showed why.**
+Anchoring markers to the start of a line looks right, until you see that the
+model quoted the format inside a *multi-line backtick span* — so its fake
+marker sits alone on its own line exactly like a real one. A screenshot of
+rendered Markdown cannot show that distinction. Asking for the raw reply has
+now changed the fix twice in one session.
+
+The reasoning ends at the **last** end-marker in its block instead, since the
+reasoning may legitimately mention a marker and the real transition is the
+final one. Scoping the block needed the same care: a start-marker may only
+open a new block once the current one has closed, because a quoted *start*
+would otherwise cut the block short and swallow the answer entirely — which
+it did, on the first attempt at this fix.
+
+### The browser opened before Melon was ready
+
+The launcher opened the browser on a fixed five-second timer with no idea
+whether anything was listening. On a slow machine the tab arrives before Vite
+has bound, and a first-time user cannot tell a slow start from a broken
+install. On a fast machine it waited five seconds for nothing.
+
+It now waits for the page **and** the API to answer — the page alone is not
+enough, because the client proxies `/api` and a tab opened too early shows
+errors that fix themselves moments later. Measured: a server already up is
+detected in 38 ms instead of waiting 5000, and one that binds at 1200 ms is
+caught at 1316 ms. If either half is still silent after 90 seconds it says
+which one and declines to open a tab that would only show an error.
 
 ---
 
