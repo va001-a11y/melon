@@ -2,7 +2,9 @@ import type { Settings, Settings as SettingsType } from "./types";
 import { PACE_MAX, PACE_STEP, REPLY_LENGTHS, describePace } from "./defaults";
 import { THEMES } from "./themes";
 import type { ThemeChoice } from "./themes";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { KEY_WARNING, applyBackup, collectBackup, describeBackup } from "./backup";
+import type { BackupSummary } from "./backup";
 import { SUPPORT_LABEL, SUPPORT_URL } from "./config";
 import { SEARCH_PROVIDERS, getSearchProvider } from "@melon/core";
 
@@ -18,6 +20,57 @@ interface Props {
 
 export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPipeline }: Props) {
   // Keep the "Match my system" description truthful if the device changes.
+
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [armedForKeys, setArmedForKeys] = useState(false);
+  const [pending, setPending] = useState<BackupSummary | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const download = (withKeys: boolean) => {
+    const backup = collectBackup(withKeys);
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const day = new Date().toISOString().slice(0, 10);
+    /*
+     * The filename has to carry the warning too. This file will sit in a
+     * Downloads folder for months after the dialog that produced it is
+     * forgotten, and by then its name is the only thing left saying what is
+     * inside it.
+     */
+    a.download = backup.containsApiKeys
+      ? `melon-backup-CONTAINS-API-KEYS-${day}.json`
+      : `melon-backup-${day}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setArmedForKeys(false);
+    setNote(
+      backup.containsApiKeys
+        ? "Downloaded. That file contains your API keys — treat it like a password."
+        : "Downloaded. No API keys are in that file, so you will re-enter them after restoring."
+    );
+  };
+
+  const chooseFile = async (file: File | undefined) => {
+    if (!file) return;
+    const summary = describeBackup(await file.text());
+    if (!summary.ok) {
+      setPending(null);
+      setNote(summary.problem ?? "That file could not be read.");
+      return;
+    }
+    setNote(null);
+    setPending(summary);
+  };
+
+  const restore = () => {
+    if (!pending?.backup) return;
+    applyBackup(pending.backup);
+    // Every piece of state in memory is now stale. Reloading is the honest
+    // way to adopt the restored data rather than reconciling it by hand.
+    window.location.reload();
+  };
 
   const patch = (p: Partial<SettingsType>) => onSettings({ ...settings, ...p });
   const replyKey = REPLY_LENGTHS.find((r) => r.tokens === settings.maxOutputTokens)?.key ?? "custom";
@@ -284,6 +337,89 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
               onChange={(e) => patch({ sessionOutputBudget: Math.max(0, Number(e.target.value) || 0) })}
             />
           </label>
+        </section>
+
+        <section className="settings-section">
+          <h3>Backup and restore</h3>
+          <small className="backup-note">
+            Melon keeps your chats, agents, settings and API keys in this browser, not in
+            Melon's folder — which is why deleting the folder loses nothing. The reverse is
+            also true: clearing your browser's site data, switching browser, or reinstalling
+            Windows loses all of it, and there is nothing on disk to recover from.
+          </small>
+
+          <div className="backup-row">
+            <button className="small-btn" onClick={() => { setArmedForKeys(false); download(false); }}>
+              Export without API keys
+            </button>
+            <button className="small-btn danger" onClick={() => setArmedForKeys(true)}>
+              Export with API keys
+            </button>
+          </div>
+
+          {armedForKeys && (
+            <div className="backup-warning">
+              <strong>This file will contain your API keys, in plain text.</strong>
+              <p>{KEY_WARNING}</p>
+              <p>
+                Anyone who opens it can spend money on your accounts. If you only want to move
+                your chats to another computer, export without keys instead and type the keys
+                in there.
+              </p>
+              <div className="backup-row">
+                <button className="small-btn danger" onClick={() => download(true)}>
+                  I understand — download it with my keys
+                </button>
+                <button className="small-btn" onClick={() => setArmedForKeys(false)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="backup-row">
+            <button className="small-btn" onClick={() => fileRef.current?.click()}>
+              Restore from a backup…
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/json,.json"
+              hidden
+              onChange={(e) => {
+                void chooseFile(e.target.files?.[0]);
+                e.target.value = "";
+              }}
+            />
+          </div>
+
+          {pending && (
+            <div className="backup-warning">
+              <strong>Restoring replaces everything currently in Melon.</strong>
+              <p>
+                This file holds {pending.chats} {pending.chats === 1 ? "chat" : "chats"} and{" "}
+                {pending.agents} {pending.agents === 1 ? "agent" : "agents"}
+                {pending.exportedAt ? `, saved ${new Date(pending.exportedAt).toLocaleString()}` : ""}.{" "}
+                {pending.containsApiKeys
+                  ? "It contains API keys, which will replace the ones you are using now."
+                  : "It contains no API keys, so you will need to enter them again afterwards."}
+              </p>
+              <p>
+                Your current chats, agents and settings will be deleted. This cannot be undone,
+                so export first if you have anything here worth keeping.
+              </p>
+              <div className="backup-row">
+                <button className="small-btn danger" onClick={restore}>
+                  Replace everything and reload
+                </button>
+                <button className="small-btn" onClick={() => setPending(null)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {note && <small className="backup-note">{note}</small>}
         </section>
 
         {/* Also lives in the top bar, which drops it on narrow screens —

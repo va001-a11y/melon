@@ -2936,3 +2936,50 @@ body {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+
+/*
+ * Backup and restore. The warning panel is deliberately loud, because it is
+ * the only thing between a convenience feature and a file full of API keys
+ * sitting in someone's Downloads folder for a year.
+ */
+.backup-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.backup-note {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.backup-warning {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.backup-warning strong {
+  display: block;
+  color: var(--danger);
+  margin-bottom: 8px;
+}
+
+.backup-warning p {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+/* Red before it is hovered, not after. A destructive button should not need
+   to be pointed at before it looks destructive. */
+.backup-warning .small-btn.danger {
+  color: var(--danger);
+  border-color: var(--danger);
+}
