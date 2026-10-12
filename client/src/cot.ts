@@ -147,13 +147,35 @@ export function splitCot(text: string, agentNames: string[] = []): SplitResult {
     answers.push(rest.slice(0, startIdx));
 
     const afterStart = rest.slice(startIdx + COT_START.length);
-    const endIdx = afterStart.indexOf(COT_END);
-    if (endIdx < 0) {
-      // Still inside the reasoning section: nothing after it has arrived yet.
+    /*
+     * The LAST end-marker in this block, not the first.
+     *
+     * The markers are in-band signalling, so a model that recites the format
+     * it was given -- "===REASONING=== then <reasoning> then ===ANSWER===" --
+     * puts a second copy inside its own reasoning, and taking the first match
+     * ended the reasoning there. The user saw half the deliberation rendered
+     * as the answer, starting mid-sentence. Anchoring markers to the start of
+     * a line does not help: the model quoted the format inside a multi-line
+     * backtick span, so the spurious marker sat alone on its own line too.
+     *
+     * The search is scoped to this block, since a later block's markers
+     * belong to that block and must not pull this one's boundary along.
+     */
+    const firstEnd = afterStart.indexOf(COT_END);
+    if (firstEnd < 0) {
       reasonings.push(afterStart);
       reasoningInProgress = true;
       break;
     }
+    /*
+     * A start-marker can only open a NEW block once this one has closed, so
+     * the bound is the first start AFTER an end. The model quotes both
+     * markers while reciting the format, and a quoted start inside the
+     * reasoning would otherwise cut the block short and swallow the answer.
+     */
+    const nextStart = afterStart.indexOf(COT_START, firstEnd + COT_END.length);
+    const block = nextStart < 0 ? afterStart : afterStart.slice(0, nextStart);
+    const endIdx = block.lastIndexOf(COT_END);
     reasonings.push(afterStart.slice(0, endIdx));
     rest = dropProtocolNewline(afterStart.slice(endIdx + COT_END.length));
   }
