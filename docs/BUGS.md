@@ -72,6 +72,40 @@ They are listed in full below.
 
 ---
 
+## Why these were found by using it, not by testing it
+
+Almost every defect in this file passed its own tests at the time. The tests
+were not bad. They encoded what was expected, and the bugs lived just outside
+that — on the far side of what is usually called the happy path, the route
+where everything behaves the way you imagined when you wrote it.
+
+| What was assumed | What actually happened |
+| --- | --- |
+| A model *follows* the `===REASONING===` format | It *recited* the format, putting a copy of both markers inside its own reasoning |
+| The dev server binds within five seconds | A slower machine took longer, so the browser opened on a connection error |
+| The lockfile agrees with package.json | It did not, so `--omit=dev` pruned tsx and the image built green and could not start |
+| Ollama is reached over loopback | A container is not loopback, so Ollama refused it |
+| A base URL is just an address | It can carry `?key=` or `user:pass@`, so exporting one leaks a secret |
+
+Nobody writes a test for "what if the model quotes my protocol back at me",
+because **you have to have seen it to think of it**. `splitCot` had eighteen
+tests and every one of them passed; every one of them also described a model
+following the format it was given.
+
+So tests and use do different jobs. A test stops a fix being quietly undone
+six months later, which is worth a great deal. But new shapes come from
+somebody running the thing and noticing that a reply began mid-sentence, or
+that a tab opened a moment too early. Both of those arrived as "this looks
+odd", not as a failing assertion.
+
+That is what this file is for: turning the second kind into the first. Each
+entry says *the lesson is*, not merely *the fix was*, so the next instance is
+recognised instead of rediscovered — and so the test that gets written
+afterwards guards a shape that reality actually produced, rather than one
+somebody imagined.
+
+---
+
 ## Before the repository (2026-08-08 to 08-24)
 
 ### Orchestration and providers
