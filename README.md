@@ -143,7 +143,15 @@ The catch worth knowing: browser storage is tied to the exact address, **includi
 
 Since it is browser storage, clearing your browsing data — or using a different browser — starts you fresh. That is also why deleting Melon's folder loses nothing: the code was in the folder, your data never was.
 
-**Settings → Backup and restore** writes the lot to one file: every chat, every agent, your presets, teams and settings. It is also how you move a chat history to another computer, which is otherwise impossible.
+**Settings → Backup and restore** writes it to one file: every chat, every agent, your presets, teams and settings. It is also how you move a chat history to another computer, which is otherwise impossible.
+
+**What to export** picks how much goes in, because the two halves travel for different reasons:
+
+- **Everything** — the full safety copy. The right default.
+- **Agents only** — the line-up: agents, presets and the team arrangement. For carrying a setup to another machine, or to a second browser, without dragging a chat history along.
+- **Chats only** — the conversation history by itself. **Never contains API keys**, because keys live with the agents, so there is no warning to read and nothing to be careful with.
+
+**A partial restore only replaces its own half.** Restoring a chats file replaces your chats and leaves your agents and keys exactly as they were; restoring an agents file leaves your chats alone. Melon tells you which it is about to do before you confirm, and the file records its own scope so it cannot be misread later.
 
 There are two export buttons, and the difference matters:
 

@@ -4,7 +4,7 @@ import { THEMES } from "./themes";
 import type { ThemeChoice } from "./themes";
 import { useEffect, useRef, useState } from "react";
 import { KEY_WARNING, applyBackup, collectBackup, describeBackup } from "./backup";
-import type { BackupSummary } from "./backup";
+import type { BackupScope, BackupSummary } from "./backup";
 import { SUPPORT_LABEL, SUPPORT_URL } from "./config";
 import { SEARCH_PROVIDERS, getSearchProvider } from "@melon/core";
 
@@ -22,12 +22,19 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
   // Keep the "Match my system" description truthful if the device changes.
 
   const fileRef = useRef<HTMLInputElement>(null);
+  const [scope, setScope] = useState<BackupScope>("everything");
   const [armedForKeys, setArmedForKeys] = useState(false);
   const [pending, setPending] = useState<BackupSummary | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
+  const SCOPE_WORD: Record<BackupScope, string> = {
+    everything: "backup",
+    agents: "agents",
+    chats: "chats",
+  };
+
   const download = (withKeys: boolean) => {
-    const backup = collectBackup(withKeys);
+    const backup = collectBackup(scope, withKeys);
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -40,8 +47,8 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
      * inside it.
      */
     a.download = backup.containsApiKeys
-      ? `melon-backup-CONTAINS-API-KEYS-${day}.json`
-      : `melon-backup-${day}.json`;
+      ? `melon-${SCOPE_WORD[scope]}-CONTAINS-API-KEYS-${day}.json`
+      : `melon-${SCOPE_WORD[scope]}-${day}.json`;
     a.click();
     URL.revokeObjectURL(url);
     setArmedForKeys(false);
@@ -348,13 +355,46 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
             Windows loses all of it, and there is nothing on disk to recover from.
           </small>
 
+          <div className="settings-row">
+            <span>
+              <label htmlFor="backup-scope">What to export</label>
+              <small>
+                {scope === "everything"
+                  ? "Chats, agents, presets, teams and settings — the full safety copy"
+                  : scope === "agents"
+                    ? "Just the line-up: agents, presets and team arrangement. Good for carrying a setup to another machine"
+                    : "Just the conversation history. Never contains API keys, since keys live with the agents"}
+              </small>
+            </span>
+            <select
+              id="backup-scope"
+              value={scope}
+              onChange={(e) => {
+                setArmedForKeys(false);
+                setScope(e.target.value as BackupScope);
+              }}
+            >
+              <option value="everything">Everything (default)</option>
+              <option value="agents">Agents only</option>
+              <option value="chats">Chats only</option>
+            </select>
+          </div>
+
           <div className="backup-row">
-            <button className="small-btn" onClick={() => { setArmedForKeys(false); download(false); }}>
-              Export without API keys
-            </button>
-            <button className="small-btn danger" onClick={() => setArmedForKeys(true)}>
-              Export with API keys
-            </button>
+            {scope === "chats" ? (
+              <button className="small-btn" onClick={() => download(false)}>
+                Export chats
+              </button>
+            ) : (
+              <>
+                <button className="small-btn" onClick={() => { setArmedForKeys(false); download(false); }}>
+                  Export without API keys
+                </button>
+                <button className="small-btn danger" onClick={() => setArmedForKeys(true)}>
+                  Export with API keys
+                </button>
+              </>
+            )}
           </div>
 
           {armedForKeys && (
@@ -395,22 +435,38 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
 
           {pending && (
             <div className="backup-warning">
-              <strong>Restoring replaces everything currently in Melon.</strong>
+              <strong>
+                {pending.scope === "agents"
+                  ? "Restoring replaces your agents. Your chats are left alone."
+                  : pending.scope === "chats"
+                    ? "Restoring replaces your chats. Your agents and keys are left alone."
+                    : "Restoring replaces everything currently in Melon."}
+              </strong>
               <p>
                 This file holds {pending.chats} {pending.chats === 1 ? "chat" : "chats"} and{" "}
                 {pending.agents} {pending.agents === 1 ? "agent" : "agents"}
                 {pending.exportedAt ? `, saved ${new Date(pending.exportedAt).toLocaleString()}` : ""}.{" "}
-                {pending.containsApiKeys
-                  ? "It contains API keys, which will replace the ones you are using now."
-                  : "It contains no API keys, so you will need to enter them again afterwards."}
+                {pending.scope === "chats"
+                  ? "Chats never carry API keys, and your agents are not touched by this."
+                  : pending.containsApiKeys
+                    ? "It contains API keys, which will replace the ones you are using now."
+                    : "It contains no API keys, so you will need to enter them again afterwards."}
               </p>
               <p>
-                Your current chats, agents and settings will be deleted. This cannot be undone,
-                so export first if you have anything here worth keeping.
+                {pending.scope === "agents"
+                  ? "Your current agents, presets and team arrangement will be deleted."
+                  : pending.scope === "chats"
+                    ? "Your current chats will be deleted."
+                    : "Your current chats, agents and settings will be deleted."}{" "}
+                This cannot be undone, so export first if you have anything here worth keeping.
               </p>
               <div className="backup-row">
                 <button className="small-btn danger" onClick={restore}>
-                  Replace everything and reload
+                  {pending.scope === "agents"
+                    ? "Replace my agents and reload"
+                    : pending.scope === "chats"
+                      ? "Replace my chats and reload"
+                      : "Replace everything and reload"}
                 </button>
                 <button className="small-btn" onClick={() => setPending(null)}>
                   Cancel

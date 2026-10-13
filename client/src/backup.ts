@@ -18,6 +18,28 @@ const PREFIX = "melon.";
 const CHAT_PREFIX = "melon.chat.";
 const AGENTS_KEY = "melon.agents";
 
+/**
+ * What a backup covers. Exporting everything is the right default for a
+ * safety copy, but the two halves move for different reasons: a line-up of
+ * agents is worth sharing or carrying to another machine on its own, and a
+ * chat history is worth keeping without dragging keys along with it.
+ */
+export type BackupScope = "everything" | "agents" | "chats";
+
+/** Named keys belonging to the conversation history, beyond `melon.chat.*`. */
+const CHAT_KEYS = ["melon.chats.index", "melon.currentChat"];
+
+/** The line-up: agents plus everything that describes how they are arranged. */
+const AGENT_KEYS = ["melon.agents", "melon.presets", "melon.teamNames", "melon.teamBriefs", "melon.groupPersonalities"];
+
+/** Whether a stored key belongs to a scope. */
+export function inScope(key: string, scope: BackupScope): boolean {
+  if (!key.startsWith(PREFIX)) return false;
+  if (scope === "everything") return true;
+  if (scope === "chats") return key.startsWith(CHAT_PREFIX) || CHAT_KEYS.includes(key);
+  return AGENT_KEYS.includes(key);
+}
+
 export const BACKUP_FORMAT = 1;
 
 export interface Backup {
@@ -25,6 +47,8 @@ export interface Backup {
   WARNING?: string;
   melonBackup: number;
   exportedAt: string;
+  /** Absent in files written before scopes existed; those held everything. */
+  scope?: BackupScope;
   containsApiKeys: boolean;
   data: Record<string, string>;
 }
@@ -74,11 +98,15 @@ function holdsKeys(raw: string | undefined): boolean {
   return agents.some((a) => typeof a.apiKey === "string" && a.apiKey.trim() !== "");
 }
 
-export function collectBackup(includeKeys: boolean, store: Storage = localStorage): Backup {
+export function collectBackup(
+  scope: BackupScope,
+  includeKeys: boolean,
+  store: Storage = localStorage
+): Backup {
   const data: Record<string, string> = {};
   for (let i = 0; i < store.length; i++) {
     const key = store.key(i);
-    if (!key || !key.startsWith(PREFIX)) continue;
+    if (!key || !inScope(key, scope)) continue;
     const value = store.getItem(key);
     if (value !== null) data[key] = value;
   }
@@ -89,6 +117,7 @@ export function collectBackup(includeKeys: boolean, store: Storage = localStorag
   const body = {
     melonBackup: BACKUP_FORMAT,
     exportedAt: new Date().toISOString(),
+    scope,
     containsApiKeys,
     data,
   };
@@ -100,6 +129,8 @@ export interface BackupSummary {
   ok: boolean;
   problem?: string;
   exportedAt?: string;
+  /** What this file will replace. Legacy files without one held everything. */
+  scope: BackupScope;
   chats: number;
   agents: number;
   /** Determined by inspecting the agents, so a hand-edited header cannot lie. */
@@ -108,7 +139,7 @@ export interface BackupSummary {
 }
 
 export function describeBackup(text: string): BackupSummary {
-  const empty = { ok: false, chats: 0, agents: 0, containsApiKeys: false };
+  const empty = { ok: false, scope: "everything" as BackupScope, chats: 0, agents: 0, containsApiKeys: false };
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -124,8 +155,14 @@ export function describeBackup(text: string): BackupSummary {
   }
   const data = b.data as Record<string, string>;
   const agents = parseAgents(data[AGENTS_KEY]);
+  // A file written before scopes existed carried everything, so that is the
+  // only safe reading of a missing field, and the only one that restores such
+  // a file the way it was written.
+  const scope: BackupScope =
+    b.scope === "agents" || b.scope === "chats" ? b.scope : "everything";
   return {
     ok: true,
+    scope,
     exportedAt: typeof b.exportedAt === "string" ? b.exportedAt : undefined,
     chats: Object.keys(data).filter((k) => k.startsWith(CHAT_PREFIX)).length,
     agents: agents?.length ?? 0,
@@ -138,15 +175,23 @@ export function describeBackup(text: string): BackupSummary {
  * Replace rather than merge. A restore that half-applied — new agents beside
  * old ones, chats from two machines interleaved — would be worse than either
  * state, and impossible to reason about afterwards.
+ *
+ * Confining the replacement to the file's own scope is equally deliberate,
+ * and is what makes a partial export safe to accept: restoring a chats-only
+ * file must not delete the agents it never contained, which is precisely
+ * what a blanket wipe would have done.
  */
 export function applyBackup(backup: Backup, store: Storage = localStorage): void {
-  const existing: string[] = [];
+  const scope: BackupScope =
+    backup.scope === "agents" || backup.scope === "chats" ? backup.scope : "everything";
+
+  const doomed: string[] = [];
   for (let i = 0; i < store.length; i++) {
     const key = store.key(i);
-    if (key && key.startsWith(PREFIX)) existing.push(key);
+    if (key && inScope(key, scope)) doomed.push(key);
   }
-  for (const key of existing) store.removeItem(key);
+  for (const key of doomed) store.removeItem(key);
   for (const [key, value] of Object.entries(backup.data)) {
-    if (key.startsWith(PREFIX) && typeof value === "string") store.setItem(key, value);
+    if (inScope(key, scope) && typeof value === "string") store.setItem(key, value);
   }
 }
