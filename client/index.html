@@ -4,6 +4,41 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Melon — Multi-Model AI</title>
+    <script>
+      /*
+       * Set the theme before the first paint.
+       *
+       * data-theme is normally applied by React once the bundle has loaded,
+       * and until then the document has no theme at all -- which lets the
+       * `:root:not([data-theme])` dark fallback in the stylesheet take over on
+       * a device set to dark. The result is a flash of Dusk before Melon
+       * settles on the palette you actually chose, and the slower the start,
+       * the longer it lasts: worst in a container on a cold load, where a
+       * stranger reads it as a broken app rather than a loading one.
+       *
+       * Deliberately inline and tiny, because anything fetched separately
+       * arrives too late to matter. React applies the real choice a moment
+       * later and corrects anything this gets wrong, so it only has to be
+       * right often enough to stop the flash.
+       */
+      try {
+        var raw = localStorage.getItem("melon.theme");
+        var sel = "paper";
+        if (raw) {
+          var v = JSON.parse(raw);
+          sel = typeof v === "string" ? v : (v && v.selection) || "paper";
+        }
+        // "system" is a retired setting that may still be sitting in storage.
+        if (sel === "system") {
+          sel = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dusk" : "paper";
+        }
+        document.documentElement.setAttribute("data-theme", sel);
+      } catch (e) {
+        // Private windows and blocked site data both throw here. A theme is
+        // still better than none, since none is what causes the flash.
+        document.documentElement.setAttribute("data-theme", "paper");
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
