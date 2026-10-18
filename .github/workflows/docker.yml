@@ -112,6 +112,16 @@ jobs:
           # single-page fallback, or a typo would answer with HTML.
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/nope)" = "404" \
             && echo "API 404 intact"
+          # The defences from the October 2026 security review must hold.
+          # Without these checks a later change could quietly remove one and
+          # every other test here would still pass.
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/api/stop)" = "403" \
+            && echo "cross-site POST refused"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example.com' http://127.0.0.1:8080/api/health)" = "403" \
+            && echo "rebinding Host refused"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'x-melon: 1' -H 'content-type: text/plain' --data x http://127.0.0.1:8080/api/run)" = "400" \
+            && echo "malformed run rejected, not fatal"
+          curl -fsS http://127.0.0.1:8080/api/health >/dev/null && echo "still up after all of that"
 
       # The payoff: Melon's own probe, running inside the container, finding
       # a real Ollama out on the host and reading its model list back.
@@ -162,7 +172,7 @@ jobs:
           }
           JSON
           curl -fsS -N --max-time 300 -X POST http://127.0.0.1:8080/api/run \
-            -H 'content-type: application/json' \
+            -H 'content-type: application/json' -H 'x-melon: 1' \
             --data @/tmp/run.json > /tmp/run.sse
           echo "--- events received ---"
           grep '^event: ' /tmp/run.sse | sort | uniq -c
