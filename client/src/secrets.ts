@@ -26,3 +26,13 @@ export function sanitiseBaseUrl(raw: string): string {
     return url.split("?")[0].split("#")[0];
   }
 }
+
+/**
+ * Whether a URL may become a clickable link. React 18 only warns about a
+ * javascript: href -- it still renders it -- so this is the check that
+ * actually stops one, at the last point before it reaches the page.
+ */
+export function isWebUrl(url: string): boolean {
+  const u = url.trim().toLowerCase();
+  return u.startsWith("http://") || u.startsWith("https://");
+}

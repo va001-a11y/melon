@@ -7,6 +7,7 @@ import { ROLES } from "./defaults";
 import { formatUsd } from "./cost";
 import type { Estimate } from "./cost";
 import { MAX_ATTACHMENTS, formatSize, prepareFile } from "./files";
+import { isWebUrl } from "./secrets";
 import { PROVIDERS, attachmentTokens } from "@melon/core";
 import { Markdown } from "./Markdown";
 
@@ -457,9 +458,14 @@ function AgentCard({
           <ol>
             {response.citations.map((c) => (
               <li key={c.url}>
-                <a href={c.url} target="_blank" rel="noreferrer noopener" title={c.url}>
-                  {c.title || hostOf(c.url)}
-                </a>
+                {isWebUrl(c.url) ? (
+                  <a href={c.url} target="_blank" rel="noreferrer noopener" title={c.url}>
+                    {c.title || hostOf(c.url)}
+                  </a>
+                ) : (
+                  // Shown, so nothing silently vanishes, but never clickable.
+                  <span title={c.url}>{c.title || c.url}</span>
+                )}
                 <span className="source-host">{c.title ? hostOf(c.url) : ""}</span>
               </li>
             ))}

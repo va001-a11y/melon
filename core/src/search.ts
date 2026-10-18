@@ -215,11 +215,32 @@ async function tavily(apiKey: string, query: string, max: number, signal?: Abort
   });
   if (!res.ok) throw await searchHttpError(res, "Tavily");
   const data: any = await res.json();
-  return (data.results ?? []).slice(0, max).map((r: any) => ({
-    url: String(r.url ?? ""),
-    title: String(r.title ?? ""),
-    snippet: String(r.content ?? "").trim(),
-  }));
+  // Filter BEFORE taking the first few: otherwise a junk URL uses up a slot
+  // and a real result that would have fitted gets pushed out.
+  return (data.results ?? [])
+    .map((r: any) => ({
+      url: String(r.url ?? ""),
+      title: String(r.title ?? ""),
+      snippet: String(r.content ?? "").trim(),
+    }))
+    .filter((h: SearchHit) => isWebUrl(h.url))
+    .slice(0, max);
+}
+
+/**
+ * Only real web links become citations. Provider citations already pass
+ * through CitationCollector, which enforces this; Melon's own search results
+ * were mapped straight through and skipped it, and a citation becomes a
+ * clickable link in someone's browser. A search API returning a javascript:
+ * URL would be a bug on their side -- this makes sure it stays their bug.
+ *
+ * Filtered here, at the source, because the hits are numbered [1], [2]... in
+ * the prompt. Dropping one any later would shift every number after it, and
+ * the model's citations would point at the wrong sources.
+ */
+function isWebUrl(url: string): boolean {
+  const u = url.trim().toLowerCase();
+  return u.startsWith("http://") || u.startsWith("https://");
 }
 
 async function brave(apiKey: string, query: string, max: number, signal?: AbortSignal): Promise<SearchHit[]> {
@@ -230,11 +251,16 @@ async function brave(apiKey: string, query: string, max: number, signal?: AbortS
   });
   if (!res.ok) throw await searchHttpError(res, "Brave Search");
   const data: any = await res.json();
-  return (data.web?.results ?? []).slice(0, max).map((r: any) => ({
-    url: String(r.url ?? ""),
-    title: String(r.title ?? ""),
-    snippet: String(r.description ?? "").trim(),
-  }));
+  // Filter BEFORE taking the first few: otherwise a junk URL uses up a slot
+  // and a real result that would have fitted gets pushed out.
+  return (data.web?.results ?? [])
+    .map((r: any) => ({
+      url: String(r.url ?? ""),
+      title: String(r.title ?? ""),
+      snippet: String(r.description ?? "").trim(),
+    }))
+    .filter((h: SearchHit) => isWebUrl(h.url))
+    .slice(0, max);
 }
 
 /** Say which of the three likely problems it is, rather than echoing a code. */
