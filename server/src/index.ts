@@ -8,9 +8,13 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { listModels, testAgent } from "./models.js";
+import { guardOutboundFetch } from "./outbound.js";
 
 // Deliberately not process.env.PORT: dev launchers set PORT for the
 // front-end and would collide the API server onto Vite's port.
+// Before anything can fetch: see outbound.ts for what is refused, and why so little.
+guardOutboundFetch();
+
 const PORT = Number(process.env.MELON_SERVER_PORT ?? 5175);
 /*
  * Which address to listen on. 127.0.0.1 keeps Melon off the local network,
