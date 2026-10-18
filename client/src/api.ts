@@ -1,6 +1,14 @@
 import { RUNS_LOCALLY } from "./target";
 import type { Agent, AnalyticsSnapshot, Attachment, Bundle, Citation, GuardState, RegistryInfo, Settings, Usage } from "./types";
 
+/**
+ * Sent on every POST. A custom header cannot be attached to a cross-site
+ * request without a CORS preflight, and the server answers no preflights, so
+ * this one header is what stops any web page you visit from driving Melon:
+ * stopping your runs, resetting the spending guard, or worse.
+ */
+const MELON_HEADER = { "x-melon": "1" } as const;
+
 export interface HistoryTurn {
   role: "user" | "assistant";
   agentName?: string;
@@ -42,7 +50,7 @@ export async function resetAnalytics(): Promise<void> {
     (await import("@melon/core")).analytics.reset();
     return;
   }
-  await fetch("/api/analytics/reset", { method: "POST" });
+  await fetch("/api/analytics/reset", { method: "POST", headers: MELON_HEADER });
 }
 
 export async function flagResponse(provider: string, model: string): Promise<void> {
@@ -52,7 +60,7 @@ export async function flagResponse(provider: string, model: string): Promise<voi
   }
   await fetch("/api/analytics/flag", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...MELON_HEADER },
     body: JSON.stringify({ provider, model }),
   });
 }
@@ -128,7 +136,7 @@ export async function listModels(agent: Agent): Promise<ModelListResult> {
   try {
     const res = await fetch("/api/list-models", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...MELON_HEADER },
       body: JSON.stringify({
         id: agent.id,
         name: agent.name,
@@ -153,7 +161,7 @@ export async function testAgent(agent: Agent): Promise<{ ok: boolean; message: s
   try {
     const res = await fetch("/api/test-agent", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...MELON_HEADER },
       body: JSON.stringify({
         id: agent.id,
         name: agent.name,
@@ -219,7 +227,7 @@ export async function resetGuard(): Promise<void> {
     (await import("@melon/core")).tokenGuard.reset();
     return;
   }
-  await fetch("/api/guard/reset", { method: "POST" });
+  await fetch("/api/guard/reset", { method: "POST", headers: MELON_HEADER });
 }
 
 export async function stopTokenFlow(): Promise<void> {
@@ -229,7 +237,7 @@ export async function stopTokenFlow(): Promise<void> {
     (await import("@melon/core")).stopController.stopAll();
     return;
   }
-  await fetch("/api/stop", { method: "POST" });
+  await fetch("/api/stop", { method: "POST", headers: MELON_HEADER });
 }
 
 function deviceProfile(): { cores?: number; memoryGb?: number } {
@@ -277,7 +285,7 @@ export async function runConversation(
   try {
     res = await fetch("/api/run", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...MELON_HEADER },
       body: JSON.stringify(body),
     });
   } catch (err) {

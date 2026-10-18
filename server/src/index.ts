@@ -3,6 +3,7 @@ import { sseSink } from "./sse.js";
 import type { AgentSpec, RunRequest } from "@melon/core";
 import { BUNDLES, COMPAT_PROVIDERS, HARD_AGENT_CAP, MODEL_REGISTRY, PROVIDERS, RECOMMENDED_AGENTS, analytics, resolveTarget, runConversation, stopController, tokenGuard } from "@melon/core";
 import { execFile } from "node:child_process";
+import { isIP } from "node:net";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,6 +23,67 @@ const BIND = process.env.MELON_BIND ?? "127.0.0.1";
 const app = express();
 // Attachments are base64 in the body, so this has to be generous: a 4 MB
 // file is ~5.5 MB encoded, and several can be sent at once.
+/*
+ * DNS rebinding. Binding to 127.0.0.1 keeps other machines out, but not other
+ * websites: an attacker's domain can be made to resolve to 127.0.0.1 after the
+ * page loads, at which point the browser treats Melon as same-origin with it
+ * and lets it read every response. The one thing that gives it away is the
+ * Host header, which still carries the attacker's domain.
+ *
+ * So a request is accepted only when Host is localhost or a bare IP address.
+ * Rebinding needs a domain name to work, so IPs are safe to allow -- which
+ * keeps Melon reachable at http://192.168.1.20:8080 from a phone on the same
+ * network. Anyone putting it behind a reverse proxy with its own name adds
+ * that name to MELON_ALLOWED_HOSTS. Vite applies the same rule to its own
+ * dev server for the same reason.
+ */
+const EXTRA_HOSTS = (process.env.MELON_ALLOWED_HOSTS ?? "")
+  .split(",")
+  .map((h) => h.trim().toLowerCase())
+  .filter(Boolean);
+
+function hostAllowed(header: string | undefined): boolean {
+  if (!header) return false;
+  let host = header.trim().toLowerCase();
+  // IPv6 literals arrive bracketed, port and all: [::1]:5175
+  host = host.startsWith("[") ? host.slice(1, host.indexOf("]")) : host.split(":")[0];
+  if (host === "localhost" || host.endsWith(".localhost")) return true;
+  if (isIP(host)) return true;
+  return EXTRA_HOSTS.includes(host);
+}
+
+app.use((req, res, next) => {
+  if (hostAllowed(req.headers.host)) {
+    next();
+    return;
+  }
+  res
+    .status(403)
+    .type("text/plain")
+    .send(
+      `Melon refused a request addressed to "${req.headers.host ?? ""}".` + "\n\n" +
+        "If you are reaching Melon through a reverse proxy or a hostname of your own, add that name to " +
+        "MELON_ALLOWED_HOSTS (comma-separated) and restart it. Requests to localhost or to an IP " +
+        "address are always accepted.\n"
+    );
+});
+
+/*
+ * Cross-site requests. A plain POST counts as a CORS "simple request", so any
+ * page you visit could send one to Melon without asking -- stop every run,
+ * reset the spending guard, or start a conversation on your keys. Melon's own
+ * client sends this header on every POST. A cross-site page cannot add it
+ * without a preflight, and Melon answers no preflights, so the browser never
+ * sends those requests at all.
+ */
+app.use("/api", (req, res, next) => {
+  if (req.method !== "POST" || req.get("x-melon") === "1") {
+    next();
+    return;
+  }
+  res.status(403).json({ error: "Missing the X-Melon header that Melon's own client sends." });
+});
+
 app.use(express.json({ limit: "40mb" }));
 
 /**
