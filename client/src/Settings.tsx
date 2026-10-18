@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { KEY_WARNING, applyBackup, collectBackup, describeBackup } from "./backup";
 import type { BackupScope, BackupSummary } from "./backup";
 import { SUPPORT_LABEL, SUPPORT_URL } from "./config";
-import { SEARCH_PROVIDERS, getSearchProvider } from "@melon/core";
+import { MAX_ROUNDS, SEARCH_PROVIDERS, getSearchProvider } from "@melon/core";
 
 interface Props {
   settings: SettingsType;
@@ -172,7 +172,7 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
                 <small>Each agent speaks once per round</small>
               </span>
               <select value={String(settings.rounds)} onChange={(e) => patch({ rounds: Number(e.target.value) })}>
-                {[2, 3, 5, 10, 20].map((n) => (
+                {[2, 3, 5, 10, 20].filter((n) => n <= MAX_ROUNDS).map((n) => (
                   <option key={n} value={n}>
                     {n} rounds
                   </option>

@@ -163,6 +163,13 @@ function contextTokens(history: HistoryTurn[], userMessage: string, attachments:
  * genuinely debate. The user ends it with STOP; context and budget limits
  * end it automatically.
  */
+/**
+ * The most rounds any discussion may run, in either mode. Matches the largest
+ * choice the interface offers, which filters its list against this so the two
+ * cannot drift apart.
+ */
+export const MAX_ROUNDS = 20;
+
 export async function runConversation(req: RunRequest, sink: RunSink): Promise<void> {
   const runId = newRunId();
 
@@ -264,7 +271,12 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
   const mode = req.settings.discussionMode ?? "single";
   // "single" is one pass; "rounds" is a fixed count; "until-agreed" runs
   // until every agent marks agreement (or a brake stops it).
-  const plannedRounds = mode === "single" ? 1 : mode === "rounds" ? Math.max(1, req.settings.rounds ?? 3) : 0;
+  // Clamped here, not trusted from the request: the interface never offers
+  // more than MAX_ROUNDS, so anything above it came from somewhere else, and
+  // an unbounded number is an unbounded bill.
+  const requested = Math.floor(Number(req.settings.rounds) || 3);
+  const plannedRounds =
+    mode === "single" ? 1 : mode === "rounds" ? Math.min(MAX_ROUNDS, Math.max(1, requested)) : 0;
   const untilAgreed = mode === "until-agreed";
 
   sink.send("run-start", {
@@ -595,6 +607,22 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
   const isPipeline = teamsInOrder.length > 1;
 
   for (let round = 0; untilAgreed || round < plannedRounds; round++) {
+    /*
+     * "Until they agree" ends on agreement, a full context or a spent budget
+     * -- but with a large context window and no budget set, agents that never
+     * converge would keep talking on the user's keys indefinitely. Twenty
+     * rounds is as long as the fixed-rounds mode allows; a discussion that has
+     * not agreed by then is not going to.
+     */
+    if (untilAgreed && round >= MAX_ROUNDS) {
+      stopReason = "round-limit";
+      sink.send("error", {
+        message:
+          `They still had not agreed after ${MAX_ROUNDS} rounds, so Melon stopped them here rather than ` +
+          `keep spending on a discussion that is not converging.`,
+      });
+      break;
+    }
     if (controller.signal.aborted) break;
 
     // Stop before a round that cannot fit.
