@@ -245,6 +245,23 @@ function AgentCard({
    */
   const isLocalModel = PROVIDERS.find((p) => p.id === response.provider)?.group === "Local";
   const preparing = response.status === "streaming" && !response.text && isLocalModel && elapsedSeconds >= 5;
+
+  /*
+   * What the card claims while a reply is in flight. It used to say
+   * "writing…" from the moment the request left, so a model that had not sent
+   * a single token -- a free model queued for ten seconds, or one reasoning
+   * with Show reasoning off -- claimed to be writing to an empty card. In a
+   * run with Answer simultaneously on, that made a slow agent look stuck
+   * beside a fast one, and was reported as the agents not running together
+   * at all. They were; one simply had not started talking yet.
+   */
+  const phase: "starting" | "preparing" | "thinking" | "writing" = !response.text
+    ? preparing
+      ? "preparing"
+      : "starting"
+    : answer
+      ? "writing"
+      : "thinking";
   const [flagged, setFlagged] = useState(false);
   const [copied, setCopied] = useState<"no" | "yes" | "failed">("no");
   const [noteDismissed, setNoteDismissed] = useState(false);
@@ -312,19 +329,22 @@ function AgentCard({
         <span
           className="card-status"
           title={
-            preparing
-              ? "A local model loads into memory and reads the prompt before it writes anything. " +
-                "The first request after a pause is the slowest, and a large model on a machine without a GPU " +
-                "can take minutes."
-              : undefined
+            response.status !== "streaming"
+              ? undefined
+              : phase === "preparing"
+                ? "A local model loads into memory and reads the prompt before it writes anything. " +
+                  "The first request after a pause is the slowest, and a large model on a machine without a GPU " +
+                  "can take minutes."
+                : phase === "starting"
+                  ? "The request has reached the provider and nothing has come back yet. Busy and free models " +
+                    "are often queued before they begin, so a long wait here is usually the provider, not Melon."
+                  : phase === "thinking"
+                    ? "The model is reasoning before it answers. Switch on Show reasoning in Settings to watch it."
+                    : undefined
           }
         >
           {response.status === "streaming" &&
-            (preparing
-              ? `preparing… ${elapsedSeconds}s`
-              : response.startedAt
-                ? `writing… ${elapsedSeconds}s`
-                : "writing…")}
+            (response.startedAt ? `${phase}… ${elapsedSeconds}s` : `${phase}…`)}
           {response.status === "pending" &&
             (pacing ? "paused to slow spending" : waitingFor ? `waiting for ${waitingFor}` : "waiting")}
           {response.status === "stopped" && "⏹ stopped"}
