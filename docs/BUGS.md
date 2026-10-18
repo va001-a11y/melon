@@ -1062,6 +1062,73 @@ which one and declines to open a tab that would only show an error.
 
 ---
 
+## After v0.6.2 (2026-10-18) — an external security review
+
+The user asked another model to review Melon for vulnerabilities. It
+returned seven findings. Every one was checked against the code before
+anything was changed, and the headline one was reproduced against a live
+server first: one request, and the process was gone.
+
+**This is the exception to the section above about bugs being found by use.**
+Not one of these could have been found by using Melon, however carefully,
+because using Melon is the one thing an attacker does not do. A security bug
+lives on a path no ordinary user takes. It needed someone deliberately
+looking for it.
+
+### One request from any web page ended the server
+
+`/api/run` handed its body straight to the orchestrator and discarded the
+promise with `void`. A `text/plain` body arrives as `{}`, the orchestrator
+read `req.agents.length`, the rejection escaped, and since Node 15 an
+unhandled rejection ends the process. A `text/plain` POST is a CORS *simple
+request*, so any page could send it without a preflight. The body is now
+checked before the stream opens, the promise is caught, the other async
+routes are wrapped, and a process-wide handler logs rather than dies.
+
+### Other websites, and DNS rebinding
+
+No Origin or Host check, so any page could stop runs or reset the spending
+guard, and a rebinding domain could read every response. **Two attacks, and
+each defence stops only one.** A custom header on every POST stops
+cross-site requests, because a page cannot add one without a preflight Melon
+never grants. It does nothing against rebinding, where the browser considers
+the attacker same-origin; only checking `Host` stops that. IP addresses stay
+allowed because rebinding needs a domain name.
+
+### Fetching cloud metadata on someone else's behalf
+
+The server fetches whatever base URL an agent names. Exposed on a cloud VM,
+that reaches `169.254.169.254`. Refusing it is easy; **refusing it without
+breaking Ollama is the actual design problem**, since `host.docker.internal`
+is a private address. So link-local is refused and private ranges are not.
+
+### Search results became links unchecked, and a limit with no ceiling
+
+Melon's own search citations skipped the `http(s)` filter that provider
+citations pass through. `rounds` had a floor and no ceiling.
+
+### Three of my own bugs, found while fixing these
+
+- **An SSRF bypass in the SSRF fix.** The URL parser rewrites
+  `[::ffff:169.254.169.254]` as `::ffff:a9fe:a9fe`, so a check for the dotted
+  form waved it through. The tests caught it; reading the code would not have.
+- **Slicing before filtering.** The citation fix filtered junk URLs *after*
+  taking the first few results, so junk used up slots and pushed real results
+  out. With half the results hostile, it kept two of three.
+- **A test that tested the wrong server.** `kill $!` killed the `npx` wrapper
+  and left Node running, so the next test's server failed to bind and every
+  request went to the old code. Every check "passed" because nothing was
+  being checked. Clean up by port, not by the wrapper's PID.
+
+### And one recommendation not taken
+
+The review suggested lowering the 40 MB body limit because PDF parsing moved
+to the browser. That is true of PDFs and false of images, which still travel
+base64 in the body. **Review the reviewer**: it was right six times out of
+seven, and the seventh would have broken multi-image messages.
+
+---
+
 ## Testing notes that cost time to learn
 
 - **A `window.fetch` recorder does not see** dynamic `import()` or Worker

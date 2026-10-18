@@ -55,7 +55,7 @@ Change the **left-hand** number only — `"127.0.0.1:9000:8080"` in `docker-comp
 
 **Then leave that number alone.** Browser storage is tied to the origin, and the origin includes the port, so changing it later makes every saved chat, agent and API key appear to have been deleted. They have not been — they are still under the old address — but there is no way to move them across.
 
-By default Melon listens on `127.0.0.1`, so only this machine can reach it. To use it from your phone or another computer, drop that prefix in `docker-compose.yml` so the line reads `"8080:8080"`. Think before you do: anyone who can reach that address can use your Melon.
+By default Melon listens on `127.0.0.1`, so only this machine can reach it. To use it from your phone or another computer, drop that prefix in `docker-compose.yml` so the line reads `"8080:8080"`. Think before you do: anyone who can reach that address can use your Melon **and** make it fetch addresses on your network on their behalf — your router's admin page, other services on the LAN. Expose it only on a network where you trust everyone, and see *Melon's local server* under Security below.
 
 **Using Ollama from the container.** Ollama runs on your machine, not inside the container, so `localhost` from in there means the container itself. The compose file already points Melon at the host:
 
@@ -206,6 +206,16 @@ Melon is bring-your-own-key. Your keys stay in your browser, requests go straigh
 **What Melon does defend against is the opposite direction: text arriving from outside trying to give your agents orders.** Agents are told that only your message sets the task, and that teammates' turns, web search results and attachments are material to weigh rather than instructions to obey. This matters more here than in a single-model chat, because Melon is a relay — one agent's reply becomes the next agent's input, so a hostile web page could otherwise travel down the whole line.
 
 That is a prompt instruction, not a sandbox, so treat it as a speed bump rather than a wall. The standing advice is the one Melon shows you in the app: a reply that cites no sources is unverified, whoever wrote it.
+
+**Melon's local server, and what it refuses.** The desktop launcher and the Docker image both run a small server on your machine, and a server is something other programs can talk to. An external security review in October 2026 found four ways that could be abused; all four were fixed in v0.6.3, and the details are in [`docs/BUGS.md`](docs/BUGS.md).
+
+- **Other websites cannot drive it.** Every request that changes something must carry a header that only Melon's own page sends. A website you happen to visit cannot add one without the browser asking Melon's permission first, and Melon never grants it — so the browser never sends the request. Before this, any page could stop your runs, reset your spending guard, or shut the server down with a single request.
+- **It only answers when addressed as `localhost` or by IP address.** That defeats *DNS rebinding*, where a malicious domain is made to point at your own machine so a web page can read Melon's replies. Rebinding needs a domain name, so IP addresses stay allowed — `http://192.168.1.20:8080` from your phone still works.
+  **If you put Melon behind a reverse proxy with its own hostname**, add that name to `MELON_ALLOWED_HOSTS` (comma-separated), or Melon will refuse it and tell you exactly this.
+- **It will not fetch cloud metadata.** Agents can point at any address, and the server fetches it for them. It refuses link-local addresses — where cloud servers keep instance metadata and credentials — but deliberately not private ones, because that is where Ollama lives.
+- **A malformed request no longer stops it.** One bad request used to end the whole process.
+
+**Do not share one Melon between people.** It is built for one person. Anyone who can reach an exposed instance can use every key stored in *their own* browser through it, can reset the spending guard that everyone else is relying on, and can make it fetch addresses on the network it runs in. If several people want Melon, each should run their own.
 
 **Where your keys actually live, and who could reach them.** Browser storage is scoped to the *origin* serving the page, and Melon does not own its origin in either build.
 

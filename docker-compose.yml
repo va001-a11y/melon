@@ -26,6 +26,11 @@ services:
       # reach Melon from your phone or another computer on your network.
       - "127.0.0.1:8080:8080"
     environment:
+      # Behind a reverse proxy with its own hostname? Melon only answers
+      # requests addressed to localhost or an IP address, which is what
+      # protects it from DNS rebinding. Name your proxy's hostname here,
+      # comma-separated, or Melon will refuse it -- and say so.
+      # MELON_ALLOWED_HOSTS: "melon.example.lan"
       # Ollama runs on your machine, not in this container, so "localhost"
       # here would mean the container itself. host.docker.internal is how a
       # container addresses the machine hosting it. Melon reads OLLAMA_HOST
