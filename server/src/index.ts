@@ -24,6 +24,43 @@ const app = express();
 // file is ~5.5 MB encoded, and several can be sent at once.
 app.use(express.json({ limit: "40mb" }));
 
+/**
+ * Express 4 does not catch a rejected promise from an async handler. The
+ * rejection escapes, Node treats it as unhandled, and the whole server exits
+ * -- taking every running conversation with it over one bad request. This
+ * turns it into an ordinary 500 instead.
+ */
+type Handler = (req: express.Request, res: express.Response) => Promise<void>;
+function safe(fn: Handler): express.RequestHandler {
+  return (req, res) => {
+    fn(req, res).catch((err: unknown) => {
+      console.error("Melon: request failed:", err);
+      if (!res.headersSent) res.status(500).json({ error: "Melon could not handle that request." });
+      else res.end();
+    });
+  };
+}
+
+/**
+ * The minimum shape runConversation needs before it touches anything. Without
+ * it, a body that is not JSON -- `Content-Type: text/plain` leaves req.body as
+ * {} -- reached `req.agents.length`, threw inside a discarded promise, and
+ * ended the process. That request is one any web page can send with no CORS
+ * preflight, so it was a remote off-switch for Melon.
+ */
+function isRunRequest(body: unknown): body is RunRequest {
+  if (!body || typeof body !== "object") return false;
+  const b = body as Record<string, unknown>;
+  return (
+    typeof b.userMessage === "string" &&
+    Array.isArray(b.history) &&
+    Array.isArray(b.agents) &&
+    b.agents.every((a) => a !== null && typeof a === "object") &&
+    b.settings !== null &&
+    typeof b.settings === "object"
+  );
+}
+
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, activeRuns: stopController.activeRunCount() });
 });
@@ -58,14 +95,14 @@ app.get("/api/registry", (_req, res) => {
  */
 
 /** Ask a provider which models it currently serves. */
-app.post("/api/list-models", listModels);
+app.post("/api/list-models", safe(listModels));
 
 /**
  * Probe the machine for local model runtimes and report what is actually
  * there. Turns "could not connect" into a list of what IS reachable and
  * which models are installed.
  */
-app.get("/api/detect-local", async (_req, res) => {
+app.get("/api/detect-local", safe(async (_req, res) => {
   // OLLAMA_HOST relocates Ollama; honour it before falling back to the default.
   const envHost = process.env.OLLAMA_HOST?.trim();
   const ollamaHosts = ["127.0.0.1", "localhost"];
@@ -131,10 +168,10 @@ app.get("/api/detect-local", async (_req, res) => {
   }
 
   res.json({ runtimes: results, diagnosis, ollamaHost: envHost ?? null });
-});
+}));
 
 /** Send one tiny message to check an agent's provider/model/key really work. */
-app.post("/api/test-agent", testAgent);
+app.post("/api/test-agent", safe(testAgent));
 
 app.get("/api/analytics", (_req, res) => {
   res.json(analytics.snapshot());
@@ -170,11 +207,22 @@ app.get("/api/marketplace", (_req, res) => {
  */
 
 app.post("/api/run", (req, res) => {
+  // Checked before the stream opens, so a bad request gets a real 400 rather
+  // than an event stream that dies on its first line.
+  if (!isRunRequest(req.body)) {
+    res.status(400).json({ error: "That is not a valid conversation request." });
+    return;
+  }
   res.setHeader("content-type", "text/event-stream");
   res.setHeader("cache-control", "no-cache");
   res.setHeader("connection", "keep-alive");
   res.flushHeaders();
-  void runConversation(req.body as RunRequest, sseSink(res));
+  const sink = sseSink(res);
+  runConversation(req.body, sink).catch((err: unknown) => {
+    console.error("Melon: a run failed:", err);
+    sink.send("error", { message: "Something went wrong on Melon's side, and this reply was stopped." });
+    sink.end();
+  });
 });
 
 // STOP TOKEN FLOW — global circuit breaker. Terminal by design: aborted
@@ -212,6 +260,19 @@ if (existsSync(join(CLIENT_DIST, "index.html"))) {
  * avoid a spurious failure. A genuine clash still ends with a clear message
  * rather than a stack trace.
  */
+/*
+ * The last line of defence. Since Node 15 an unhandled rejection ends the
+ * process, which turns any forgotten await anywhere into a way to stop
+ * Melon. Logging it keeps the server up and leaves the bug visible.
+ *
+ * Deliberately not uncaughtException: after a synchronous throw the process
+ * may be in a state nobody can reason about, and carrying on is worse than
+ * stopping.
+ */
+process.on("unhandledRejection", (reason) => {
+  console.error("Melon: caught an unhandled error and kept running:", reason);
+});
+
 function start(attempt = 1): void {
   // Bind to 127.0.0.1 explicitly rather than every interface: it keeps the
   // server off the local network, and matches the address the client proxies
