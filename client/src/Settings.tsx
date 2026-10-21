@@ -286,8 +286,10 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
                   autoComplete="off"
                   spellCheck={false}
                   placeholder="Paste your key"
-                  value={settings.searchApiKey}
-                  onChange={(e) => patch({ searchApiKey: e.target.value })}
+                  value={settings.searchApiKeys[settings.searchProvider] ?? ""}
+                  onChange={(e) =>
+                    patch({ searchApiKeys: { ...settings.searchApiKeys, [settings.searchProvider]: e.target.value } })
+                  }
                 />
               </label>
 

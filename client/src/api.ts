@@ -254,10 +254,18 @@ export async function runConversation(
   attachments: Attachment[],
   callbacks: RunCallbacks
 ): Promise<void> {
+  /*
+   * Exactly one search key goes out: the selected engine's. The map holds a
+   * key for every engine the user has set up, and none of the others has any
+   * business leaving the page -- not to Melon's server, and certainly not to
+   * a different search company.
+   */
+  const { searchApiKeys, ...rest } = settings;
+  const wireSettings = { ...rest, searchApiKey: searchApiKeys?.[settings.searchProvider] ?? "" };
   const body = {
     userMessage,
     history,
-    settings,
+    settings: wireSettings,
     attachments,
     device: deviceProfile(),
     agents: agents.map((a) => ({

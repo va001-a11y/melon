@@ -56,7 +56,13 @@ export interface Settings {
    * their own — including local models. Both fields are needed before it runs.
    */
   searchProvider: string;
-  searchApiKey: string;
+  /**
+   * One key per engine, keyed by engine id. It used to be a single field
+   * shared by every engine, so switching from one to another sent the old
+   * engine's key to the new one until the user noticed -- a secret going to
+   * the wrong company. Only the selected engine's key ever leaves the page.
+   */
+  searchApiKeys: Record<string, string>;
   /** Pipeline team names and briefs, keyed by team number. */
   teamNames?: Record<string, string>;
   teamBriefs?: Record<string, string>;

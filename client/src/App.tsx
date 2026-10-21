@@ -252,6 +252,15 @@ export default function App() {
     // "Meme / Creative" became "Creative". Without this the saved key would
     // not match any entry in MODES and the dropdown would show a blank.
     if (stored.mode === "meme") stored.mode = "creative";
+    // One search key per engine now. A key saved by an older version belongs
+    // to whichever engine was selected when it was saved, so it moves there
+    // rather than being lost. A fresh object, never the shared default's.
+    const legacy = (stored as { searchApiKey?: unknown }).searchApiKey;
+    stored.searchApiKeys = { ...(stored.searchApiKeys ?? {}) };
+    if (typeof legacy === "string" && legacy.trim() && stored.searchProvider && !stored.searchApiKeys[stored.searchProvider]) {
+      stored.searchApiKeys[stored.searchProvider] = legacy;
+    }
+    delete (stored as { searchApiKey?: unknown }).searchApiKey;
     return stored;
   });
   const [showAnalytics, setShowAnalytics] = useState(false);
@@ -905,7 +914,7 @@ export default function App() {
         {/* Tapping outside closes the drawer; inert on desktop. */}
         <div className="drawer-backdrop" onClick={() => setSidebarOpen(false)} />
         <Sidebar
-          melonSearch={Boolean(settings.searchProvider && settings.searchApiKey.trim())}
+          melonSearch={Boolean(settings.searchProvider && (settings.searchApiKeys[settings.searchProvider] ?? "").trim())}
           agents={agents}
           setAgents={setAgents}
           providers={registry?.providers ?? []}
