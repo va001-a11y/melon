@@ -5,7 +5,8 @@ import type { ThemeChoice } from "./themes";
 import { useEffect, useRef, useState } from "react";
 import { KEY_WARNING, applyBackup, collectBackup, describeBackup } from "./backup";
 import type { BackupScope, BackupSummary } from "./backup";
-import { SUPPORT_LABEL, SUPPORT_URL } from "./config";
+import { DESKTOP_URL, SUPPORT_LABEL, SUPPORT_URL } from "./config";
+import { RUNS_LOCALLY } from "./target";
 import { MAX_ROUNDS, SEARCH_PROVIDERS, getSearchProvider } from "@melon/core";
 
 interface Props {
@@ -263,13 +264,36 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
               onChange={(e) => patch({ searchProvider: e.target.value })}
             >
               <option value="">None — only providers with built-in search</option>
-              {SEARCH_PROVIDERS.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label} — {p.freeTier} free
-                </option>
-              ))}
+              {SEARCH_PROVIDERS.map((p) => {
+                // Shown, never hidden: a missing engine reads as "Melon does not
+                // support it", which is not true -- the desktop app does.
+                const blocked = RUNS_LOCALLY && p.browser === "cors-blocked";
+                const saved = (settings.searchApiKeys[p.id] ?? "").trim() !== "";
+                return (
+                  <option key={p.id} value={p.id} disabled={blocked}>
+                    {p.label} — {blocked ? "desktop app only" : p.freeTier}
+                    {saved && !blocked ? " · key saved" : ""}
+                  </option>
+                );
+              })}
             </select>
           </label>
+
+          {RUNS_LOCALLY &&
+            SEARCH_PROVIDERS.some((p) => p.browser === "cors-blocked") && (
+              <p className="settings-note">
+                {(() => {
+                  const chosen = getSearchProvider(settings.searchProvider);
+                  return chosen?.browser === "cors-blocked"
+                    ? `${chosen.label} does not accept requests from web pages, so it cannot work in this hosted version. Choose another engine above, or use `
+                    : "Some engines refuse requests from web pages, so they only work in ";
+                })()}
+                <a href={DESKTOP_URL} target="_blank" rel="noreferrer noopener">
+                  the desktop app
+                </a>
+                .
+              </p>
+            )}
 
           {settings.searchProvider && (
             <>

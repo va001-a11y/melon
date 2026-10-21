@@ -25,7 +25,7 @@
  */
 
 /** Search services Melon can drive. Adding one is this file plus a case. */
-export type SearchProviderId = "tavily" | "brave";
+export type SearchProviderId = "tavily" | "brave" | "serper" | "linkup" | "exa" | "serpapi" | "firecrawl";
 
 export interface SearchProviderDef {
   id: SearchProviderId;
@@ -45,22 +45,78 @@ export interface SearchProviderDef {
   note: string;
 }
 
+/*
+ * Every `browser` value below was measured, not assumed: each API was sent the
+ * same CORS preflight a browser sends from the hosted site (October 2026).
+ * Three refuse it -- Brave answers 405, Exa omits the allow-origin header,
+ * SerpAPI answers 404 -- so on the hosted build they are shown but disabled.
+ * In the desktop app and in Docker the server makes the request and CORS does
+ * not apply, so every engine here works there.
+ */
 export const SEARCH_PROVIDERS: SearchProviderDef[] = [
   {
     id: "tavily",
     label: "Tavily",
     signupUrl: "https://tavily.com",
-    freeTier: "1,000 searches a month",
-    browser: "unknown",
+    freeTier: "1,000 free searches a month",
+    browser: "ok",
     note: "Built for feeding LLMs: returns cleaned page text, not just links, which is what makes the answers usable.",
+  },
+  {
+    id: "serper",
+    label: "Serper",
+    signupUrl: "https://serper.dev",
+    freeTier: "free credits to start",
+    browser: "ok",
+    note:
+      "Google's own ranking, and the cheapest by a distance. Its snippets are a sentence long, so it works best " +
+      "with Read full pages switched on: Google picks the pages, then Melon reads them.",
+  },
+  {
+    id: "linkup",
+    label: "Linkup",
+    signupUrl: "https://app.linkup.so",
+    freeTier: "free credits to start",
+    browser: "ok",
+    note:
+      "Returns long passages of page text, so models have more to work from. Its sources can lean towards " +
+      "secondary sites, so check dates on anything time-sensitive.",
+  },
+  {
+    id: "firecrawl",
+    label: "Firecrawl",
+    signupUrl: "https://firecrawl.dev",
+    freeTier: "free credits to start",
+    browser: "ok",
+    note:
+      "Searches and reads every result in full in one step, so it already returns whole pages. Reading costs " +
+      "extra credits per result, and it is slower than a plain search.",
   },
   {
     id: "brave",
     label: "Brave Search",
     signupUrl: "https://brave.com/search/api/",
-    freeTier: "2,000 searches a month",
-    browser: "unknown",
-    note: "An independent index with a larger free tier. Returns short descriptions rather than page text.",
+    freeTier: "2,000 free searches a month",
+    browser: "cors-blocked",
+    note: "An independent index rather than Google's. Returns short descriptions rather than page text.",
+  },
+  {
+    id: "exa",
+    label: "Exa",
+    signupUrl: "https://exa.ai",
+    freeTier: "free credits to start",
+    browser: "cors-blocked",
+    note:
+      "Neural search: finds pages by meaning rather than by matching words, which suits research questions " +
+      "better than quick facts.",
+  },
+  {
+    id: "serpapi",
+    label: "SerpAPI",
+    signupUrl: "https://serpapi.com",
+    freeTier: "a free monthly allowance",
+    browser: "cors-blocked",
+    note: "Google results through a long-established API. Short snippets, like Serper.",
   },
 ];
 
@@ -196,6 +252,16 @@ export async function runWebSearch(args: WebSearchArgs): Promise<SearchHit[]> {
       return tavily(args.apiKey, query, max, args.signal);
     case "brave":
       return brave(args.apiKey, query, max, args.signal);
+    case "serper":
+      return serper(args.apiKey, query, max, args.signal);
+    case "linkup":
+      return linkup(args.apiKey, query, max, args.signal);
+    case "exa":
+      return exa(args.apiKey, query, max, args.signal);
+    case "serpapi":
+      return serpapi(args.apiKey, query, max, args.signal);
+    case "firecrawl":
+      return firecrawl(args.apiKey, query, max, args.signal);
     default:
       throw new Error(`Unknown search provider "${args.provider}".`);
   }
@@ -263,10 +329,134 @@ async function brave(apiKey: string, query: string, max: number, signal?: AbortS
     .slice(0, max);
 }
 
+/*
+ * The five engines below were built against response shapes confirmed in
+ * October 2026: Serper and Linkup by a real search with the user's own keys
+ * (scripts/probe-search.mjs), Exa, SerpAPI and Firecrawl from their official
+ * API references. Each filters to web links before taking the first few, for
+ * the reason given on isWebUrl.
+ */
+
+/** Serper: Google's ranking. organic[] carries link, title and a one-line snippet. */
+async function serper(apiKey: string, query: string, max: number, signal?: AbortSignal): Promise<SearchHit[]> {
+  const res = await fetch("https://google.serper.dev/search", {
+    method: "POST",
+    signal,
+    headers: { "content-type": "application/json", "x-api-key": apiKey },
+    body: JSON.stringify({ q: query, num: max }),
+  });
+  if (!res.ok) throw await searchHttpError(res, "Serper", apiKey);
+  const data: any = await res.json();
+  return (data.organic ?? [])
+    .map((r: any) => ({
+      url: String(r.link ?? ""),
+      title: String(r.title ?? ""),
+      snippet: String(r.snippet ?? "").trim(),
+    }))
+    .filter((h: SearchHit) => isWebUrl(h.url))
+    .slice(0, max);
+}
+
+/**
+ * Linkup: long passages of page text. Returns twenty results whatever is
+ * asked, so the limit is applied here; its results can include images, which
+ * are skipped.
+ */
+async function linkup(apiKey: string, query: string, max: number, signal?: AbortSignal): Promise<SearchHit[]> {
+  const res = await fetch("https://api.linkup.so/v1/search", {
+    method: "POST",
+    signal,
+    headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ q: query, depth: "standard", outputType: "searchResults" }),
+  });
+  if (!res.ok) throw await searchHttpError(res, "Linkup", apiKey);
+  const data: any = await res.json();
+  return (data.results ?? [])
+    .filter((r: any) => r.type === undefined || r.type === "text")
+    .map((r: any) => ({
+      url: String(r.url ?? ""),
+      title: String(r.name ?? ""),
+      snippet: String(r.content ?? "").trim(),
+    }))
+    .filter((h: SearchHit) => isWebUrl(h.url))
+    .slice(0, max);
+}
+
+/**
+ * Exa: neural search. It returns no page text unless asked, so the request
+ * asks for exactly as much as Melon would keep -- Exa charges for content by
+ * the amount, and anything beyond the snippet limit would be discarded.
+ */
+async function exa(apiKey: string, query: string, max: number, signal?: AbortSignal): Promise<SearchHit[]> {
+  const res = await fetch("https://api.exa.ai/search", {
+    method: "POST",
+    signal,
+    headers: { "content-type": "application/json", "x-api-key": apiKey },
+    body: JSON.stringify({ query, numResults: max, contents: { text: { maxCharacters: MAX_SNIPPET_CHARS } } }),
+  });
+  if (!res.ok) throw await searchHttpError(res, "Exa", apiKey);
+  const data: any = await res.json();
+  return (data.results ?? [])
+    .map((r: any) => ({
+      url: String(r.url ?? ""),
+      title: String(r.title ?? ""),
+      snippet: String(r.text ?? "").trim(),
+    }))
+    .filter((h: SearchHit) => isWebUrl(h.url))
+    .slice(0, max);
+}
+
+/**
+ * SerpAPI: Google results. It takes the key as a query parameter, which is
+ * its design rather than a choice here -- hence the scrubbing in
+ * searchHttpError, and why it runs only from the desktop server.
+ */
+async function serpapi(apiKey: string, query: string, max: number, signal?: AbortSignal): Promise<SearchHit[]> {
+  const params = new URLSearchParams({ engine: "google", q: query, num: String(max), api_key: apiKey });
+  const res = await fetch(`https://serpapi.com/search.json?${params}`, { signal, headers: { accept: "application/json" } });
+  if (!res.ok) throw await searchHttpError(res, "SerpAPI", apiKey);
+  const data: any = await res.json();
+  return (data.organic_results ?? [])
+    .map((r: any) => ({
+      url: String(r.link ?? ""),
+      title: String(r.title ?? ""),
+      snippet: String(r.snippet ?? "").trim(),
+    }))
+    .filter((h: SearchHit) => isWebUrl(h.url))
+    .slice(0, max);
+}
+
+/**
+ * Firecrawl: search and read in one call. v2 nests the results under
+ * data.web, and each carries the whole page as markdown when asked for it,
+ * falling back to the short description if a page could not be read.
+ */
+async function firecrawl(apiKey: string, query: string, max: number, signal?: AbortSignal): Promise<SearchHit[]> {
+  const res = await fetch("https://api.firecrawl.dev/v2/search", {
+    method: "POST",
+    signal,
+    headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ query, limit: max, scrapeOptions: { formats: [{ type: "markdown" }] } }),
+  });
+  if (!res.ok) throw await searchHttpError(res, "Firecrawl", apiKey);
+  const data: any = await res.json();
+  return (data.data?.web ?? [])
+    .map((r: any) => ({
+      url: String(r.url ?? ""),
+      title: String(r.title ?? ""),
+      snippet: String(r.markdown || r.description || "").trim(),
+    }))
+    .filter((h: SearchHit) => isWebUrl(h.url))
+    .slice(0, max);
+}
+
 /** Say which of the three likely problems it is, rather than echoing a code. */
-async function searchHttpError(res: Response, label: string): Promise<Error> {
+async function searchHttpError(res: Response, label: string, apiKey = ""): Promise<Error> {
   const body = await res.text().catch(() => "");
-  const detail = body.slice(0, 200).trim();
+  // An API that echoes its own request back in an error would carry the key
+  // with it -- SerpAPI's goes in the URL. Blanked before anything is shown.
+  const scrub = (t: string) => (apiKey ? t.split(apiKey).join("[your key]") : t);
+  const detail = scrub(body.slice(0, 200).trim());
   if (res.status === 401 || res.status === 403) {
     return new Error(`${label} rejected the API key. Check it in Settings → Web search.`);
   }
