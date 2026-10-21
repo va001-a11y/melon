@@ -317,6 +317,28 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
                 />
               </label>
 
+              {settings.searchProvider === "firecrawl" ? (
+                <p className="settings-note">
+                  Firecrawl already reads every result in full, so there is nothing more to switch on here.
+                </p>
+              ) : (
+                <label className="settings-row checkbox-row">
+                  <span>
+                    Read full pages
+                    <small>
+                      Before answering, Melon reads the top three results in full through Jina Reader — free, no
+                      key — instead of relying on one-line snippets, which is where stale figures tend to hide.
+                      Slower, uses more of each model's context, and tells Jina which three pages were read
+                    </small>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={settings.readFullPages}
+                    onChange={(e) => patch({ readFullPages: e.target.checked })}
+                  />
+                </label>
+              )}
+
               <p className="settings-note">
                 {getSearchProvider(settings.searchProvider)?.note}{" "}
                 <a

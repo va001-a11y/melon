@@ -21,8 +21,9 @@ import { stopController } from "./stop.js";
 import { HARD_AGENT_CAP } from "./registry.js";
 import { PROVIDERS, contextWindowFor, getProvider, supportsVision, webSearchBlockReason } from "./catalog.js";
 import {
-  MAX_SEARCH_BLOCK_TOKENS,
   formatSearchContext,
+  readFullPages,
+  searchReserveTokens,
   getSearchProvider,
   pruneUnusedSources,
   runWebSearch,
@@ -228,7 +229,9 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
     req.agents.some(
       (a) => a.webSearch === true && webSearchBlockReason(getProvider(a.provider), a.model) !== null
     );
-  const searchReserve = melonSearchPossible ? MAX_SEARCH_BLOCK_TOKENS : 0;
+  const searchReserve = melonSearchPossible
+    ? searchReserveTokens(req.settings.searchProvider, req.settings.readFullPages === true)
+    : 0;
   const usableWindow = Math.max(1000, smallest - req.settings.maxOutputTokens - 800 - searchReserve);
   const startingContext = contextTokens(req.history, req.userMessage, req.attachments ?? []);
   if (startingContext >= usableWindow) {
@@ -357,10 +360,14 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
   const searchOnce = (engineId: string, apiKey: string) => {
     if (!sharedSearch) {
       const query = searchQueryFor(req.history, req.userMessage);
-      sharedSearch = runWebSearch({ provider: engineId, apiKey, query, signal: controller.signal }).then((hits) => ({
-        context: formatSearchContext(query, hits),
-        citations: hits.map((h) => ({ url: h.url, title: h.title || undefined })),
-      }));
+      sharedSearch = runWebSearch({ provider: engineId, apiKey, query, signal: controller.signal })
+        // Read the top results in full when asked. Shared like the search, so
+        // a relay of five agents reads each page once, not five times.
+        .then((hits) => (req.settings.readFullPages ? readFullPages(hits, controller.signal) : hits))
+        .then((hits) => ({
+          context: formatSearchContext(query, hits),
+          citations: hits.map((h) => ({ url: h.url, title: h.title || undefined })),
+        }));
     }
     return sharedSearch;
   };

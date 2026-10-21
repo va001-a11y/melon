@@ -53,6 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // second signup, so it is opt-in rather than something to discover broken.
   searchProvider: "",
   searchApiKeys: {},
+  readFullPages: false,
 };
 
 /** Burn-rate slider bounds, in output tokens per minute. 0 = no limit. */

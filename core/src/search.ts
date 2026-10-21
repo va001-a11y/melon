@@ -130,6 +130,11 @@ export interface SearchHit {
   title: string;
   /** Page text or description — whatever the service gave us. */
   snippet: string;
+  /**
+   * The snippet is the page itself, read in full, rather than a summary line.
+   * Such results get a larger allowance in the prompt: see MAX_PAGE_CHARS.
+   */
+  fullPage?: boolean;
 }
 
 export interface WebSearchArgs {
@@ -445,6 +450,7 @@ async function firecrawl(apiKey: string, query: string, max: number, signal?: Ab
       url: String(r.url ?? ""),
       title: String(r.title ?? ""),
       snippet: String(r.markdown || r.description || "").trim(),
+      fullPage: Boolean(r.markdown),
     }))
     .filter((h: SearchHit) => isWebUrl(h.url))
     .slice(0, max);
@@ -539,6 +545,80 @@ const MAX_SNIPPET_CHARS = 1500;
  */
 export const MAX_SEARCH_BLOCK_TOKENS = 2200;
 
+/**
+ * A page that was read in full gets twice a snippet's room. Snippets are cut
+ * to 1,500 characters on the grounds that the useful part of a page is near
+ * the top; a whole page is read precisely because it might not be, so it
+ * needs more. Still bounded: a long page is cut, never passed whole.
+ */
+const MAX_PAGE_CHARS = 3000;
+
+/** How many results may be read in full, and so use that larger allowance. */
+const FULL_PAGE_SLOTS = 3;
+
+/**
+ * The most a block with full pages can cost: three pages at 3,000 characters,
+ * two snippets at 1,500, plus titles, links and instructions, at roughly four
+ * characters per token.
+ */
+export const MAX_READ_BLOCK_TOKENS = 3400;
+
+/**
+ * What to reserve for a search before it runs. Full pages are possible when
+ * the user asked for them, or when the engine returns them anyway -- Firecrawl
+ * reads every result it finds -- and the context guard has to plan for the
+ * larger block in either case, or it would promise room the pages then take.
+ */
+export function searchReserveTokens(engineId: string | undefined, readPages: boolean): number {
+  return readPages || engineId === "firecrawl" ? MAX_READ_BLOCK_TOKENS : MAX_SEARCH_BLOCK_TOKENS;
+}
+
+/** How long one page may take to read before Melon gives up and keeps its snippet. */
+const READ_TIMEOUT_MS = 15000;
+
+/**
+ * Read the top results in full through Jina Reader.
+ *
+ * Search engines summarise pages in a line or two, and those lines are where
+ * stale or wrong figures hide: in testing, a question about the latest Node.js
+ * release got 24.19.0 from one engine's long snippets of secondary sites, while
+ * the official page -- read in full -- said 24.22.1. Reading the page puts the
+ * actual source in front of the model rather than someone's summary of it.
+ *
+ * Jina, not Melon, fetches the pages. That matters: if Melon's own server
+ * fetched whatever URL a search returned, it would reopen exactly the
+ * server-side request forgery the outbound guard exists to stop. Melon only
+ * ever talks to r.jina.ai. The cost is that Jina sees which pages are read.
+ *
+ * The URL goes in a JSON body rather than on the end of Jina's address, so a
+ * result with its own query string (?id=5&page=2) arrives intact instead of
+ * being split into Jina's parameters.
+ *
+ * Reading is a bonus, never a requirement: a page that is slow, refused or
+ * empty keeps the snippet it already had, and the search stands either way.
+ */
+export async function readFullPages(hits: SearchHit[], signal?: AbortSignal): Promise<SearchHit[]> {
+  const read = async (hit: SearchHit): Promise<SearchHit> => {
+    if (hit.fullPage || !isWebUrl(hit.url)) return hit;
+    try {
+      const timeout = AbortSignal.timeout(READ_TIMEOUT_MS);
+      const res = await fetch("https://r.jina.ai/", {
+        method: "POST",
+        signal: signal && typeof AbortSignal.any === "function" ? AbortSignal.any([signal, timeout]) : timeout,
+        headers: { accept: "application/json", "content-type": "application/json" },
+        body: JSON.stringify({ url: hit.url }),
+      });
+      if (!res.ok) return hit;
+      const data: any = await res.json();
+      const content = String(data?.data?.content ?? "").trim();
+      return content ? { ...hit, snippet: content, fullPage: true } : hit;
+    } catch {
+      return hit;
+    }
+  };
+  return Promise.all(hits.map((hit, i) => (i < FULL_PAGE_SLOTS ? read(hit) : hit)));
+}
+
 /** Cut at a sentence end if there is one nearby, otherwise at a word. */
 function clampSnippet(text: string, limit = MAX_SNIPPET_CHARS): string {
   if (text.length <= limit) return text;
@@ -559,8 +639,15 @@ export function formatSearchContext(query: string, hits: SearchHit[]): string {
   if (hits.length === 0) {
     return `WEB SEARCH: Melon searched the web for "${query}" and found nothing usable. Say so rather than answering from memory as though you had sources.`;
   }
+  // A full page gets the larger allowance, but only the first few: that is
+  // what keeps the block inside MAX_READ_BLOCK_TOKENS whichever engine ran.
+  let pagesLeft = FULL_PAGE_SLOTS;
   const body = hits
-    .map((h, i) => `[${i + 1}] ${h.title || h.url}\n${h.url}\n${clampSnippet(h.snippet)}`)
+    .map((h, i) => {
+      const asPage = h.fullPage && pagesLeft-- > 0;
+      const text = clampSnippet(h.snippet, asPage ? MAX_PAGE_CHARS : MAX_SNIPPET_CHARS);
+      return `[${i + 1}] ${h.title || h.url}\n${h.url}\n${text}`;
+    })
     .join("\n\n");
   return (
     `WEB SEARCH RESULTS — Melon searched the web for "${query}" and pasted the results below verbatim.\n` +

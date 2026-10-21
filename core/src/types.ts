@@ -51,6 +51,11 @@ export interface RunSettings {
    */
   searchProvider?: string;
   searchApiKey?: string;
+  /**
+   * Read the top search results in full through Jina Reader before answering,
+   * instead of relying on the engine's one-line snippets.
+   */
+  readFullPages?: boolean;
   /** Conversation mode: professional | sitcom | meme | research | consensus */
   mode: string;
   detailedCoT: boolean;

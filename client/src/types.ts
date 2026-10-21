@@ -63,6 +63,8 @@ export interface Settings {
    * the wrong company. Only the selected engine's key ever leaves the page.
    */
   searchApiKeys: Record<string, string>;
+  /** Read the top results in full through Jina Reader. Off by default: slower, and uses more context. */
+  readFullPages: boolean;
   /** Pipeline team names and briefs, keyed by team number. */
   teamNames?: Record<string, string>;
   teamBriefs?: Record<string, string>;
