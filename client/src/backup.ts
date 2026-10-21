@@ -17,6 +17,15 @@ import { sanitiseBaseUrl } from "./secrets";
 const PREFIX = "melon.";
 const CHAT_PREFIX = "melon.chat.";
 const AGENTS_KEY = "melon.agents";
+const SETTINGS_KEY = "melon.settings";
+
+/**
+ * Secrets that live in settings rather than on an agent. The search engine's
+ * key is one, and keyless export used to miss it entirely: it stripped every
+ * agent's key and then wrote the search key into the file anyway, in a file
+ * the README described as safe to attach to a bug report.
+ */
+const SETTINGS_SECRET_FIELDS = ["searchApiKey", "searchApiKeys"];
 
 /**
  * What a backup covers. Exporting everything is the right default for a
@@ -91,6 +100,38 @@ function withoutSecrets(raw: string): string {
   );
 }
 
+function parseSettings(raw: string | undefined): Record<string, unknown> | null {
+  if (!raw) return null;
+  try {
+    const v = JSON.parse(raw);
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Settings with every secret field removed outright, not blanked. */
+function settingsWithoutSecrets(raw: string): string {
+  const settings = parseSettings(raw);
+  if (!settings) return raw;
+  const kept = { ...settings };
+  for (const field of SETTINGS_SECRET_FIELDS) delete kept[field];
+  return JSON.stringify(kept);
+}
+
+/** Whether settings hold any search key, in the old single field or the per-engine map. */
+function settingsHoldKeys(raw: string | undefined): boolean {
+  const settings = parseSettings(raw);
+  if (!settings) return false;
+  const single = settings.searchApiKey;
+  if (typeof single === "string" && single.trim() !== "") return true;
+  const many = settings.searchApiKeys;
+  if (many && typeof many === "object") {
+    return Object.values(many as Record<string, unknown>).some((v) => typeof v === "string" && v.trim() !== "");
+  }
+  return false;
+}
+
 /** Whether any agent actually carries a key — read from the data, never claimed. */
 function holdsKeys(raw: string | undefined): boolean {
   const agents = parseAgents(raw);
@@ -112,8 +153,9 @@ export function collectBackup(
   }
 
   if (!includeKeys && data[AGENTS_KEY]) data[AGENTS_KEY] = withoutSecrets(data[AGENTS_KEY]);
+  if (!includeKeys && data[SETTINGS_KEY]) data[SETTINGS_KEY] = settingsWithoutSecrets(data[SETTINGS_KEY]);
 
-  const containsApiKeys = includeKeys && holdsKeys(data[AGENTS_KEY]);
+  const containsApiKeys = includeKeys && (holdsKeys(data[AGENTS_KEY]) || settingsHoldKeys(data[SETTINGS_KEY]));
   const body = {
     melonBackup: BACKUP_FORMAT,
     exportedAt: new Date().toISOString(),
@@ -166,7 +208,7 @@ export function describeBackup(text: string): BackupSummary {
     exportedAt: typeof b.exportedAt === "string" ? b.exportedAt : undefined,
     chats: Object.keys(data).filter((k) => k.startsWith(CHAT_PREFIX)).length,
     agents: agents?.length ?? 0,
-    containsApiKeys: holdsKeys(data[AGENTS_KEY]),
+    containsApiKeys: holdsKeys(data[AGENTS_KEY]) || settingsHoldKeys(data[SETTINGS_KEY]),
     backup: { ...(b as Backup), data },
   };
 }
