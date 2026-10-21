@@ -1129,6 +1129,53 @@ seven, and the seventh would have broken multi-image messages.
 
 ---
 
+## After v0.6.3 (2026-10-21) — three bugs found by adding search engines
+
+Adding five search engines did not introduce these; it exposed them. Each
+had been sitting in the code since web search or backups shipped, harmless
+while there were only two engines and nobody looked closely.
+
+### "Export without API keys" exported the search key
+
+A keyless backup stripped the key from every agent, then wrote the web
+search key into the file anyway. That key lives in settings rather than on
+an agent, and the stripping only ever looked at agents. The README called
+the file safe to attach to a bug report.
+
+Present since backups shipped in v0.6.0, and mine. Found only because the
+number of search keys was about to go from one to seven, which made it worth
+asking where they all lived. Settings now name their secret fields, keyless
+exports remove them, and a file holding only a search key now counts as
+containing keys, with the warning that goes with it.
+
+**The lesson is about where secrets live.** "Strip the keys" was implemented
+as "strip the agents' keys", because that was where keys were when it was
+written. A secret moved somewhere new, and the code guarding secrets did not
+know. Name every secret field in one place, and make the export ask that
+list rather than remembering it.
+
+### One search key, shared by every engine
+
+Settings had a single search key field. Switch from Tavily to Brave and
+Melon sent your Tavily key to Brave on the next search, until you noticed
+and pasted the right one. With two engines it rarely happened; with seven it
+would have been routine. Keys are stored per engine now, and only the
+selected engine's key leaves the page.
+
+### Brave never worked on the hosted site
+
+Brave was offered on the hosted site from the day search shipped. It refuses
+the CORS preflight with a 405, so every search through it failed. The
+catalog had marked it `browser: "unknown"`, meaning "try it and report what
+happens" -- reasonable at the time, but nobody had ever tried it. Measuring
+every engine took one command. Brave, Exa and SerpAPI are now marked
+desktop-only and shown disabled there.
+
+**An "unknown" left in place is a guess with good manners.** It was meant to
+be resolved by testing, and it never was.
+
+---
+
 ## Testing notes that cost time to learn
 
 - **A `window.fetch` recorder does not see** dynamic `import()` or Worker
@@ -1152,6 +1199,10 @@ seven, and the seventh would have broken multi-image messages.
 - **Ollama's Linux installer already starts a systemd service**, so a second
   `ollama serve` dies on the taken port while a readiness curl to 127.0.0.1
   still passes against the first one. The bind looks corrected and is not.
+- **A test in a scratch folder is not a regression test.** The backup tests
+  written for v0.6.0 lived in a temporary directory that was later cleaned
+  out, and when they were needed again to check a change, they were gone. A
+  test only protects a fix if it survives long enough to be run again.
 - **Verify scripted edits by grepping for the inserted text.** The single most
   expensive bug in this project came from trusting a script that reported
   success without having matched anything.

@@ -155,7 +155,7 @@ Since it is browser storage, clearing your browsing data — or using a differen
 
 There are two export buttons, and the difference matters:
 
-- **Export without API keys** — safe to keep anywhere, copy between machines, or attach to a bug report. Your keys are stripped, and so is anything hidden in a custom base URL. You re-enter the keys after restoring.
+- **Export without API keys** — safe to keep anywhere, copy between machines, or attach to a bug report. Your model keys and search keys are stripped, and so is anything hidden in a custom base URL. You re-enter the keys after restoring.
 - **Export with API keys** — asks you to confirm, names the file `melon-backup-CONTAINS-API-KEYS-<date>.json`, and puts a warning at the top of the file itself. **Treat that file exactly like a password.** Anyone who opens it can spend money on your accounts, so keep it off email, chat, shared drives and repositories, and delete it once you have restored from it.
 
 Restoring **replaces** everything currently in Melon rather than merging, and tells you what is in the file — how many chats and agents, and whether it holds keys — before you commit to it.
@@ -170,18 +170,33 @@ Everything else has no search tool at all. For those, **Melon can do the searchi
 
 Set it up in **Settings → Web search**. It needs its own key, separate from your model keys:
 
-| Service | Free tier | Returns |
-| --- | --- | --- |
-| [Tavily](https://tavily.com) | 1,000 searches a month | Cleaned page text — better answers |
-| [Brave Search](https://brave.com/search/api/) | 2,000 searches a month | Short descriptions |
+| Engine | What it is | Returns | Hosted site |
+| --- | --- | --- | --- |
+| [Tavily](https://tavily.com) | Built for AI | Cleaned page text | ✅ |
+| [Serper](https://serper.dev) | Google's ranking, cheapest | One-line snippets | ✅ |
+| [Linkup](https://app.linkup.so) | Built for AI | Long passages of text | ✅ |
+| [Firecrawl](https://firecrawl.dev) | Searches *and* reads | Whole pages | ✅ |
+| [Brave Search](https://brave.com/search/api/) | Independent index | Short descriptions | Desktop only |
+| [Exa](https://exa.ai) | Neural — finds pages by meaning | Page text | Desktop only |
+| [SerpAPI](https://serpapi.com) | Google results | One-line snippets | Desktop only |
 
-**Search: all / none** in the agents panel switches it on for every agent that can search, instead of editing each one. Agents whose provider cannot search are left alone — an agent told to search when it cannot fails its turn deliberately, and a bulk action should not arm that.
+**"Desktop only" is measured, not guessed.** Each API was sent the same request a browser sends from the hosted site, and Brave, Exa and SerpAPI refuse it — so there they appear but cannot be chosen. In the desktop app and in Docker, Melon's server makes the request and every engine works.
+
+**Each engine keeps its own key**, and only the one you have selected is ever sent. Switching engines never hands one company another's key.
+
+**Read full pages** (Settings → Web search) has Melon read the top three results in full through [Jina Reader](https://jina.ai/reader/) — free, no key, no account — rather than relying on the engine's one-line summaries. Those summaries are where stale figures hide: asked for the latest Node.js release, one engine's snippets of secondary sites said 24.19.0, while the official page, read in full, said 24.22.1. The cost is speed, more of each model's context, and Jina seeing which pages were read. A page that cannot be read keeps its snippet, so the search never fails because of it. Firecrawl reads pages itself, so the option is not needed there.
+
+Pairing **Serper with Read full pages** is the strongest cheap combination: Google chooses which pages matter, then Melon reads them.
+
+To check an engine with your own key before relying on it, run `node scripts/probe-search.mjs`. It asks for keys without echoing them, shows what each engine returned, and never prints a key.
+
+**The Web search toggle** in the agents panel switches it on for every agent that can search, instead of editing each one. Agents whose provider cannot search are left alone — an agent told to search when it cannot fails its turn deliberately, and a bulk action should not arm that.
 
 **Agents see each other's sources.** In a relay, each agent is shown what its teammates cited, attributed to them by name. Melon's own search is shared across a run so those agents already read the same pages; provider-native search cannot be shared, since Claude, Gemini and Perplexity each search inside their own reasoning. Passing the source list on means an agent can say *"you used a social-media clip, I used Reuters"* instead of flatly contradicting a teammate for reasons neither of them can see.
 
 Providers that can search natively keep doing so; Melon's search is the fallback, and each agent's settings say which one it will use. If search is switched on and neither is available, that agent fails with a message rather than quietly answering from memory — an answer that looks researched and is not is worse than no answer.
 
-Search APIs are built server-to-server, so the hosted web build may be refused by CORS where the desktop build has no such limit. Melon reports what happened rather than guessing.
+Search results — and pages read in full — are material from the open web, handed to the model as sources to weigh rather than instructions to follow. A whole page carries far more of that text than a snippet does, which is worth bearing in mind when you switch reading on.
 
 ### Audio, and what to do instead
 
