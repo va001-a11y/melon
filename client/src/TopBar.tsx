@@ -16,9 +16,10 @@ interface Props {
   paceLimit: number;
   pacing: boolean;
   running: boolean;
-  /** Narrow screens only — the sidebar becomes a drawer this opens. */
+  /** Opens the drawer on narrow screens; hides or shows the column on wide ones. */
   onToggleSidebar: () => void;
-  sidebarOpen: boolean;
+  sidebarShown: boolean;
+  narrow: boolean;
 }
 
 export function TopBar({
@@ -36,7 +37,8 @@ export function TopBar({
   pacing,
   running,
   onToggleSidebar,
-  sidebarOpen,
+  sidebarShown,
+  narrow,
 }: Props) {
   const pct = contextLimit > 0 ? Math.min(100, (contextTokens / contextLimit) * 100) : 0;
   const full = contextLimit > 0 && contextTokens >= contextLimit;
@@ -46,11 +48,13 @@ export function TopBar({
       <button
         className="menu-btn"
         onClick={onToggleSidebar}
-        aria-expanded={sidebarOpen}
-        aria-label={sidebarOpen ? "Close agents and chats" : "Open agents and chats"}
-        title="Agents and chats"
+        aria-expanded={sidebarShown}
+        aria-label={sidebarShown ? "Hide agents and chats" : "Show agents and chats"}
+        title={sidebarShown ? "Hide agents and chats" : "Show agents and chats"}
       >
-        {sidebarOpen ? "✕" : "☰"}
+        {/* A cross only on the drawer, which covers the chat; on a desktop the
+            column sits beside it, so the same icon both hides and shows it. */}
+        {narrow && sidebarShown ? "✕" : "☰"}
       </button>
 
       <div className="brand">

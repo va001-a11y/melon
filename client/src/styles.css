@@ -2027,10 +2027,6 @@ body {
   background: var(--accent);
 }
 
-.flagged-cell {
-  color: #f0c674;
-}
-
 .bundle-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -2142,28 +2138,6 @@ body {
   margin-bottom: 10px;
 }
 
-.flag-btn {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  border-radius: 6px;
-  padding: 2px 7px;
-  font-size: 11px;
-  cursor: pointer;
-  margin-left: 6px;
-}
-
-.flag-btn:hover {
-  color: #f0c674;
-  border-color: #f0c674;
-}
-
-.flag-btn.flagged {
-  color: #f0c674;
-  border-color: #f0c674;
-  cursor: default;
-}
-
 /* ---------- Composer ---------- */
 .composer {
   border-top: 1px solid var(--border);
@@ -2261,14 +2235,41 @@ body {
  * readable chat column no longer fit side by side. Below 560px the top
  * bar sheds labels and the modals go full-bleed.
  *
- * The drawer is CSS-only in its resting state: .menu-btn and
- * .drawer-backdrop are display:none on desktop, so the extra markup costs
- * nothing there and the desktop layout is untouched.
+ * The same .menu-btn serves both: below 900px it opens the drawer, above
+ * it hides the column (.sidebar-collapsed) so the chat takes the full
+ * width. .drawer-backdrop is display:none on desktop, where nothing
+ * overlays the chat.
  * ===================================================================== */
 
-.menu-btn,
+.menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  min-height: 34px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.menu-btn:hover {
+  border-color: var(--accent);
+}
+
 .drawer-backdrop {
   display: none;
+}
+
+/* Collapsing is a wide-screen state only. On a phone it would hide the
+   drawer as well, with nothing on screen to explain why it won't open. */
+@media (min-width: 901px) {
+  .sidebar-collapsed .sidebar {
+    display: none;
+  }
 }
 
 /* Row options button: mirrors right-click, which touch devices lack.
@@ -2323,23 +2324,10 @@ body {
 
 /* ---------- Tier 2: tablet / large phone — sidebar becomes a drawer ---------- */
 @media (max-width: 900px) {
+  /* A larger target for a thumb. */
   .menu-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
     min-width: 38px;
     min-height: 38px;
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: 9px;
-    color: var(--text);
-    font-size: 16px;
-    line-height: 1;
-    cursor: pointer;
-  }
-
-  .menu-btn:hover {
-    border-color: var(--accent);
   }
 
   .topbar {
@@ -2672,8 +2660,7 @@ body {
 }
 
 /* ---------- Copy, in the card header ----------
- * Sits beside the flag button, to the right of the status. Matches .flag-btn
- * so the two read as one pair of controls rather than competing.
+ * Sits to the right of the status.
  *
  * Unlike the actions row below, this is present while a reply is still
  * streaming — copying half an answer is a reasonable thing to want, and a

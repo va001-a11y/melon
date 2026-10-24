@@ -53,18 +53,6 @@ export async function resetAnalytics(): Promise<void> {
   await fetch("/api/analytics/reset", { method: "POST", headers: MELON_HEADER });
 }
 
-export async function flagResponse(provider: string, model: string): Promise<void> {
-  if (RUNS_LOCALLY) {
-    (await import("@melon/core")).analytics.recordFlag(provider, model);
-    return;
-  }
-  await fetch("/api/analytics/flag", {
-    method: "POST",
-    headers: { "content-type": "application/json", ...MELON_HEADER },
-    body: JSON.stringify({ provider, model }),
-  });
-}
-
 export async function getMarketplace(): Promise<{ bundles: Bundle[] }> {
   if (RUNS_LOCALLY) return { bundles: (await import("@melon/core")).BUNDLES as Bundle[] };
   return fetchJson<{ bundles: Bundle[] }>("/api/marketplace");

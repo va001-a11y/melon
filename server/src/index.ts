@@ -248,18 +248,6 @@ app.post("/api/analytics/reset", (_req, res) => {
   res.json({ ok: true });
 });
 
-// User-reported inaccuracy for a specific model's response.
-app.post("/api/analytics/flag", (req, res) => {
-  const provider = typeof req.body?.provider === "string" ? req.body.provider : "";
-  const model = typeof req.body?.model === "string" ? req.body.model : "";
-  if (!provider || !model) {
-    res.status(400).json({ error: "provider and model are required" });
-    return;
-  }
-  analytics.recordFlag(provider, model);
-  res.json({ ok: true });
-});
-
 app.get("/api/marketplace", (_req, res) => {
   res.json({ bundles: BUNDLES });
 });

@@ -94,7 +94,6 @@ export function Analytics({ onClose }: Props) {
                     <th>Output share</th>
                     <th>Avg latency</th>
                     <th>First token</th>
-                    <th title="Responses you marked inaccurate, over completed calls">Flagged</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -118,9 +117,6 @@ export function Analytics({ onClose }: Props) {
                       </td>
                       <td>{ms(m.completed ? m.totalMs / m.completed : 0)}</td>
                       <td>{ms(m.firstTokenSamples ? m.totalFirstTokenMs / m.firstTokenSamples : 0)}</td>
-                      <td className={m.flagged > 0 ? "flagged-cell" : ""}>
-                        {m.flagged > 0 ? `${m.flagged} (${pct(m.flagged, m.completed)})` : "—"}
-                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -128,9 +124,7 @@ export function Analytics({ onClose }: Props) {
             )}
 
             <p className="key-note">
-              Stats cover this server process (up {ms(data.uptimeMs)}). “Flagged” counts responses you marked inaccurate
-              with the ⚑ button on a response card — it is a record of your judgement, not an automatic hallucination
-              detector.
+              Stats cover this server process (up {ms(data.uptimeMs)}).
             </p>
           </>
         )}

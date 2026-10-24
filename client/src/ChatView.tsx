@@ -22,7 +22,6 @@ interface Props {
   estimateFor: (draft: string, attachTokens?: number) => Estimate;
   onConsensus: () => void;
   canConsensus: boolean;
-  onFlag: (agentId: string) => void;
   onStop: () => void;
   parallel: boolean;
   /** Only "rounds" mode labels its passes; the others stay seamless. */
@@ -197,7 +196,6 @@ function UserBubble({
 function AgentCard({
   response,
   showReasoning,
-  onFlag,
   readsBefore,
   waitingFor,
   pacing,
@@ -209,7 +207,6 @@ function AgentCard({
   agentNames,
 }: {
   response: AgentResponse;
-  onFlag: (agentId: string) => void;
   readsBefore: string[];
   /** Who this agent is queued behind, in relay mode. */
   waitingFor: string | null;
@@ -262,7 +259,6 @@ function AgentCard({
     : answer
       ? "writing"
       : "thinking";
-  const [flagged, setFlagged] = useState(false);
   const [copied, setCopied] = useState<"no" | "yes" | "failed">("no");
   const [noteDismissed, setNoteDismissed] = useState(false);
 
@@ -376,19 +372,6 @@ function AgentCard({
             }
           >
             {copied === "yes" ? "✓" : copied === "failed" ? "✕" : "⧉"}
-          </button>
-        )}
-        {response.status === "done" && (
-          <button
-            className={`flag-btn ${flagged ? "flagged" : ""}`}
-            title={flagged ? "Marked inaccurate" : "Mark this response as inaccurate (feeds Stats)"}
-            disabled={flagged}
-            onClick={() => {
-              setFlagged(true);
-              onFlag(response.agentId);
-            }}
-          >
-            ⚑
           </button>
         )}
       </div>
@@ -588,7 +571,6 @@ export function ChatView({
   estimateFor,
   onConsensus,
   canConsensus,
-  onFlag,
   onStop,
   parallel,
   discussionMode,
@@ -833,7 +815,6 @@ export function ChatView({
                     <AgentCard
                       key={id}
                       response={r}
-                      onFlag={onFlag}
                       readsBefore={readsBefore}
                       waitingFor={ahead}
                       pacing={pacing}

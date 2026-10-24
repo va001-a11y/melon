@@ -2,8 +2,7 @@ import type { Usage } from "./types.js";
 
 /**
  * Analytics: per-model performance and usage, accumulated in memory for the
- * life of the server process. Everything here is measured, never inferred —
- * the "accuracy" signal comes from explicit user flags, not guesswork.
+ * life of the server process. Everything here is measured, never inferred.
  */
 export interface ModelStats {
   key: string; // "provider:model"
@@ -21,8 +20,6 @@ export interface ModelStats {
   /** Sum of ms to first streamed token, for averaging. */
   totalFirstTokenMs: number;
   firstTokenSamples: number;
-  /** Responses the user marked as inaccurate. */
-  flagged: number;
 }
 
 export interface RunStats {
@@ -48,7 +45,6 @@ function blank(provider: string, model: string): ModelStats {
     totalMs: 0,
     totalFirstTokenMs: 0,
     firstTokenSamples: 0,
-    flagged: 0,
   };
 }
 
@@ -112,11 +108,6 @@ class Analytics {
 
   recordThrottled(provider: string, model: string): void {
     this.entry(provider, model).throttled++;
-  }
-
-  /** User marked a response from this model as inaccurate. */
-  recordFlag(provider: string, model: string): void {
-    this.entry(provider, model).flagged++;
   }
 
   snapshot(): { models: ModelStats[]; runs: RunStats; uptimeMs: number } {

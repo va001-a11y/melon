@@ -12,7 +12,7 @@ import type {
   Settings,
 } from "./types";
 import { COST_CONFIRM_THRESHOLD, DEFAULT_SETTINGS, AGENT_COLORS, MODES, makeId } from "./defaults";
-import { flagResponse, getGuard, getRegistry, resetGuard, runConversation, stopTokenFlow } from "./api";
+import { getGuard, getRegistry, resetGuard, runConversation, stopTokenFlow } from "./api";
 import { DEFAULT_THEME_CHOICE, applyTheme, migrateThemeChoice } from "./themes";
 import type { ThemeChoice } from "./themes";
 import { Settings as SettingsModal } from "./Settings";
@@ -58,6 +58,9 @@ function migrateLegacyKeys(): void {
 }
 
 migrateLegacyKeys();
+
+/** Must match the drawer breakpoint in styles.css (Tier 2). */
+const NARROW_QUERY = "(max-width: 900px)";
 
 function loadJson<T>(key: string, fallback: T): T {
   try {
@@ -268,6 +271,25 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   /** On narrow screens the sidebar is a drawer rather than a fixed column. */
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  /**
+   * On wide screens the same button hides the column instead, and that choice
+   * is remembered: someone who wants the room wants it every time. The two
+   * states are separate so hiding it on a desktop never leaves the phone
+   * drawer stuck open, or the other way round.
+   */
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => loadJson<unknown>("melon.sidebarCollapsed", false) === true);
+  const [narrow, setNarrow] = useState(() => window.matchMedia(NARROW_QUERY).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(NARROW_QUERY);
+    const update = () => setNarrow(mq.matches);
+    mq.addEventListener("change", update);
+    // Some browsers miss the change event on a live resize; resize never misses.
+    window.addEventListener("resize", update);
+    return () => {
+      mq.removeEventListener("change", update);
+      window.removeEventListener("resize", update);
+    };
+  }, []);
   const [theme, setTheme] = useState<ThemeChoice>(() =>
     migrateThemeChoice(loadJson<unknown>("melon.theme", DEFAULT_THEME_CHOICE))
   );
@@ -310,6 +332,10 @@ export default function App() {
   }, [theme]);
   useEffect(() => localStorage.setItem("melon.chats.index", JSON.stringify(chatsIndex)), [chatsIndex]);
   useEffect(() => localStorage.setItem("melon.currentChat", JSON.stringify(chatId)), [chatId]);
+  useEffect(
+    () => localStorage.setItem("melon.sidebarCollapsed", JSON.stringify(sidebarCollapsed)),
+    [sidebarCollapsed]
+  );
 
   // Persist the current chat whenever it settles (never mid-stream).
   useEffect(() => {
@@ -882,15 +908,6 @@ export default function App() {
     []
   );
 
-  /** Mark a response as inaccurate — feeds the analytics flag rate. */
-  const flagAgentResponse = useCallback(
-    (agentId: string) => {
-      const agent = agents.find((a) => a.id === agentId);
-      if (agent) void flagResponse(agent.provider, agent.model);
-    },
-    [agents]
-  );
-
   return (
     <div className="app">
       <TopBar
@@ -907,10 +924,17 @@ export default function App() {
         paceLimit={settings.tokensPerMinute}
         pacing={pacing}
         running={running}
-        onToggleSidebar={() => setSidebarOpen((v) => !v)}
-        sidebarOpen={sidebarOpen}
+        onToggleSidebar={() => {
+          // Asked at the moment of the click, so the button can never act on a stale width.
+          const isNarrow = window.matchMedia(NARROW_QUERY).matches;
+          setNarrow(isNarrow);
+          if (isNarrow) setSidebarOpen((v) => !v);
+          else setSidebarCollapsed((v) => !v);
+        }}
+        sidebarShown={narrow ? sidebarOpen : !sidebarCollapsed}
+        narrow={narrow}
       />
-      <div className={`body ${sidebarOpen ? "drawer-open" : ""}`}>
+      <div className={`body ${sidebarOpen ? "drawer-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
         {/* Tapping outside closes the drawer; inert on desktop. */}
         <div className="drawer-backdrop" onClick={() => setSidebarOpen(false)} />
         <Sidebar
@@ -964,7 +988,6 @@ export default function App() {
           }
           onConsensus={runConsensus}
           canConsensus={messages.some((m) => m.kind === "run")}
-          onFlag={flagAgentResponse}
           onStop={handleStop}
           parallel={settings.parallel}
           discussionMode={settings.discussionMode}

@@ -117,7 +117,6 @@ export interface ModelStats {
   totalMs: number;
   totalFirstTokenMs: number;
   firstTokenSamples: number;
-  flagged: number;
 }
 
 export interface AnalyticsSnapshot {
