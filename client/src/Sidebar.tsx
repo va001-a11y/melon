@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Agent, ChatMeta, Preset, ProviderDef } from "./types";
 import { ROLES, makeId, nextColor } from "./defaults";
 import { ContextMenu } from "./ContextMenu";
@@ -82,6 +82,26 @@ export function Sidebar(props: Props) {
   const [renamingChat, setRenamingChat] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [chatQuery, setChatQuery] = useState("");
+  /**
+   * Teams folded down to their one-line heading. Three open teams push the
+   * agent list well past the bottom of the sidebar; a team you have set up
+   * and left alone rarely needs to be seen in full. Remembered per team number.
+   */
+  const [foldedTeams, setFoldedTeams] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem("melon.foldedTeams") ?? "{}");
+      return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("melon.foldedTeams", JSON.stringify(foldedTeams));
+    } catch {
+      // Private windows can refuse storage; folding still works for this visit.
+    }
+  }, [foldedTeams]);
 
   /**
    * Search titles and message text. Chats live in localStorage, so their
@@ -489,11 +509,8 @@ export function Sidebar(props: Props) {
 
         {isPipeline && (
           <div className="pipeline-bar">
-            <span>
-              Pipeline: {teamGroups.map(([t]) => teamNames[String(t)] || `Team ${t}`).join(" → ")}
-              <br />
-              Teams always run in order — each needs the previous team's work, so they cannot overlap.
-            </span>
+            {/* The hint line above already says teams run in order; this only names them. */}
+            <span>{teamGroups.map(([t]) => teamNames[String(t)] || `Team ${t}`).join(" → ")}</span>
             <button className="small-btn" onClick={mergeTeams} title="Put every agent back into one team">
               Merge
             </button>
@@ -503,9 +520,21 @@ export function Sidebar(props: Props) {
         <div className="agent-scroll">
           {/* With a pipeline, teams are the organising idea; otherwise roles are. */}
           {isPipeline &&
-            teamGroups.map(([team, members], index) => (
-              <div key={`team-${team}`} className="team-group">
+            teamGroups.map(([team, members], index) => {
+              const folded = foldedTeams[String(team)] === true;
+              const on = members.filter((a) => a.active).length;
+              return (
+              <div key={`team-${team}`} className={`team-group ${folded ? "folded" : ""}`}>
                 <div className="team-head">
+                  <button
+                    className="team-fold"
+                    aria-expanded={!folded}
+                    aria-label={`${folded ? "Show" : "Hide"} the agents in ${teamNames[String(team)] || `Team ${team}`}`}
+                    title={folded ? "Show this team's agents" : "Fold this team to one line"}
+                    onClick={() => setFoldedTeams((prev) => ({ ...prev, [String(team)]: !folded }))}
+                  >
+                    {folded ? "▸" : "▾"}
+                  </button>
                   <span className="team-step">{index + 1}</span>
                   <input
                     className="team-name"
@@ -513,7 +542,15 @@ export function Sidebar(props: Props) {
                     placeholder={`Team ${team}`}
                     onChange={(e) => setTeamNames((prev) => ({ ...prev, [String(team)]: e.target.value }))}
                   />
+                  {/* Folded, the count is all that is left to say what is inside. */}
+                  {folded && (
+                    <span className="team-count" title={`${members.length} agents, ${on} switched on`}>
+                      {on}/{members.length} on
+                    </span>
+                  )}
                 </div>
+                {!folded && (
+                <>
                 <input
                   className="team-brief"
                   value={teamBriefs[String(team)] ?? ""}
@@ -552,8 +589,11 @@ export function Sidebar(props: Props) {
                     </button>
                   </div>
                 ))}
+                </>
+                )}
               </div>
-            ))}
+              );
+            })}
 
           {!isPipeline &&
             roleGroups.map(([roleKey, members]) => {

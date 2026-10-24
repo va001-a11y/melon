@@ -1241,6 +1241,41 @@ body {
   margin-bottom: 4px;
 }
 
+.team-group.folded {
+  margin-bottom: 8px;
+}
+
+.team-fold {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.team-fold:hover {
+  background: var(--bg-card);
+  color: var(--text);
+}
+
+.team-fold:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.team-count {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  padding-right: 4px;
+}
+
 .team-step {
   width: 17px;
   height: 17px;
