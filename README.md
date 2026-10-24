@@ -343,6 +343,9 @@ was fixed, including the ones from before this repository existed. It is
 organised by the patterns that produced them, because most were instances of
 five recurring mistakes rather than isolated accidents.
 
+Its companion, [`docs/FEATURES.md`](docs/FEATURES.md), logs what each release
+added, changed or removed, and why.
+
 ## Adding models
 
 Pick a provider from the grouped list, **type the model id exactly** as the provider writes it (lower case, dashes instead of spaces — e.g. `llama-3.3-70b-versatile`), paste your key, and press **Test connection** before saving.
