@@ -18,6 +18,13 @@ interface Props {
   hardCap: number;
   running: boolean;
   banner: string | null;
+  /**
+   * Browser storage is full: "chat" when this conversation could not be
+   * saved at all, "images" when it was saved without its images, "other" when
+   * what failed is a setting or the agent list.
+   */
+  storageNotice: "chat" | "images" | "other" | null;
+  onRetrySave: () => void;
   onSend: (text: string, attachments: Attachment[]) => void;
   estimateFor: (draft: string, attachTokens?: number) => Estimate;
   onConsensus: () => void;
@@ -172,8 +179,13 @@ function UserBubble({
       {message.attachments && message.attachments.length > 0 && (
         <div className="msg-files">
           {message.attachments.map((a) => (
-            <span key={a.name} className="msg-file">
+            <span
+              key={a.name}
+              className="msg-file"
+              title={a.notSaved ? "Left out when this chat was saved, because browser storage was full" : undefined}
+            >
               {a.kind === "image" ? "🖼" : "📄"} {a.name}
+              {a.notSaved && " (not saved)"}
             </span>
           ))}
         </div>
@@ -567,6 +579,8 @@ export function ChatView({
   hardCap,
   running,
   banner,
+  storageNotice,
+  onRetrySave,
   onSend,
   estimateFor,
   onConsensus,
@@ -717,6 +731,28 @@ export function ChatView({
   return (
     <main className="chat">
       {banner && <div className="warn-banner">{banner}</div>}
+      {/*
+        Kept apart from the banner, which every new run clears: this stays
+        until a save actually succeeds, because until then something is
+        still not being kept.
+      */}
+      {storageNotice && (
+        <div className="warn-banner storage-warning" role="alert">
+          <span>
+            <strong>Browser storage is full</strong>, so{" "}
+            {storageNotice === "chat"
+              ? "this chat is not being saved. Everything here is still on screen, but its latest messages will be lost if you switch chats or close Melon."
+              : storageNotice === "images"
+                ? "this chat was saved without its images. Every message and reply is kept; the images are only on screen until you leave."
+                : "your latest changes are not being saved."}{" "}
+            To make room, delete chats you no longer need — the ones with images take the most space — or
+            export a backup first from Settings.
+          </span>
+          <button className="small-btn" onClick={onRetrySave}>
+            Try saving again
+          </button>
+        </div>
+      )}
 
       <div className="messages" ref={scrollRef} onScroll={onScroll}>
         {messages.length === 0 && (

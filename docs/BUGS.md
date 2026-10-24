@@ -1176,6 +1176,45 @@ be resolved by testing, and it never was.
 
 ---
 
+## After v0.7.0 (2026-10-24) — full browser storage
+
+Found by asking what "production ready" would demand, then testing the one
+gap that could lose someone's work. Present since chats were first saved.
+
+### Two photos crashed Melon and lost the reply
+
+Chats are saved in localStorage, which browsers cap at roughly five million
+characters per site. Images go into the saved chat as base64, a third larger
+than the file, so one 3 MB phone photo used 4.2 million of them. The second
+photo made the save throw, and because the save ran in a React effect, the
+throw took the whole page to the crash screen. The question and every reply
+to it, already paid for, were never saved.
+
+Every save now reports failure instead of throwing. A chat that will not fit
+is saved again without its image data: images are what take the room, while
+the text and the replies are small and are what cannot be had again. If even
+that will not fit, a notice says the chat is not being saved, leaving it asks
+first, and deleting a chat to make room retries the save.
+
+**The crash screen gave the wrong cure.** It said the usual cause was
+"damaged saved data" and called clearing "the reliable fix". Nothing was
+damaged, and clearing would have deleted every chat, agent and API key to fix
+what deleting one old chat fixes. It now recognises full storage and says so.
+
+### Restoring a backup that did not fit deleted your data
+
+A restore removed the current data, then wrote the backup. When a write
+failed partway, what was left was the backup's agents and part of its chats:
+your own agents, keys and chats were already gone, and the backup was not
+fully there either. The old values are now held in memory and put back if any
+write fails, so a restore either completes or changes nothing.
+
+**Storage being full is the ordinary case, not the exotic one.** It was never
+tested because nobody fills five megabytes while developing. A user with a
+phone camera does it in two messages.
+
+---
+
 ## Testing notes that cost time to learn
 
 - **A `window.fetch` recorder does not see** dynamic `import()` or Worker

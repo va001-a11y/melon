@@ -222,18 +222,35 @@ export function describeBackup(text: string): BackupSummary {
  * and is what makes a partial export safe to accept: restoring a chats-only
  * file must not delete the agents it never contained, which is precisely
  * what a blanket wipe would have done.
+ *
+ * All or nothing. The old data is removed before the new is written, so a
+ * write that fails partway — browser storage full, most likely — would leave
+ * neither: the current chats gone and the backup half-applied. What was
+ * there is held in memory first and put back if any write fails, and the
+ * error is rethrown for the caller to report.
  */
 export function applyBackup(backup: Backup, store: Storage = localStorage): void {
   const scope: BackupScope =
     backup.scope === "agents" || backup.scope === "chats" ? backup.scope : "everything";
 
-  const doomed: string[] = [];
+  const previous = new Map<string, string>();
   for (let i = 0; i < store.length; i++) {
     const key = store.key(i);
-    if (key && inScope(key, scope)) doomed.push(key);
+    if (key && inScope(key, scope)) previous.set(key, store.getItem(key) ?? "");
   }
-  for (const key of doomed) store.removeItem(key);
-  for (const [key, value] of Object.entries(backup.data)) {
-    if (inScope(key, scope) && typeof value === "string") store.setItem(key, value);
+  for (const key of previous.keys()) store.removeItem(key);
+  const written: string[] = [];
+  try {
+    for (const [key, value] of Object.entries(backup.data)) {
+      if (inScope(key, scope) && typeof value === "string") {
+        store.setItem(key, value);
+        written.push(key);
+      }
+    }
+  } catch (error) {
+    for (const key of written) store.removeItem(key);
+    // This fitted before, and the half-written backup is gone again, so it fits now.
+    for (const [key, value] of previous) store.setItem(key, value);
+    throw error;
   }
 }

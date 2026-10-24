@@ -4,6 +4,7 @@ import { THEMES } from "./themes";
 import type { ThemeChoice } from "./themes";
 import { useEffect, useRef, useState } from "react";
 import { KEY_WARNING, applyBackup, collectBackup, describeBackup } from "./backup";
+import { isQuotaError } from "./storage";
 import type { BackupScope, BackupSummary } from "./backup";
 import { DESKTOP_URL, SUPPORT_LABEL, SUPPORT_URL } from "./config";
 import { RUNS_LOCALLY } from "./target";
@@ -74,7 +75,17 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
 
   const restore = () => {
     if (!pending?.backup) return;
-    applyBackup(pending.backup);
+    try {
+      applyBackup(pending.backup);
+    } catch (error) {
+      setPending(null);
+      setNote(
+        isQuotaError(error)
+          ? "That backup is too large for the room this browser has left, so nothing was restored and your current data is exactly as it was. Delete chats you no longer need, then try again."
+          : "Restoring failed partway, so it was undone — your current data is exactly as it was."
+      );
+      return;
+    }
     // Every piece of state in memory is now stale. Reloading is the honest
     // way to adopt the restored data rather than reconciling it by hand.
     window.location.reload();

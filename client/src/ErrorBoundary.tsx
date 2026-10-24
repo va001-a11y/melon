@@ -1,5 +1,6 @@
 import { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";
+import { isQuotaError } from "./storage";
 
 /**
  * Melon keeps everything in localStorage, which means a single malformed value
@@ -114,6 +115,13 @@ export class ErrorBoundary extends Component<Props, State> {
     if (!error) return this.props.children;
 
     const keyCount = melonKeys().length;
+    /*
+     * Full storage is not damage, and clearing is the wrong cure for it: it
+     * would delete everything to fix a problem that deleting one old chat
+     * fixes. Saves now catch this themselves, so reaching here with it means
+     * some write was missed — the advice still has to be right.
+     */
+    const full = isQuotaError(error);
 
     return (
       <div className="crash-screen">
@@ -123,10 +131,18 @@ export class ErrorBoundary extends Component<Props, State> {
             Something went wrong while drawing the page, so Melon stopped rather than showing you a
             half-broken screen.
           </p>
-          <p className="crash-cause">
-            The usual cause is <strong>damaged saved data</strong> — a chat, agent or preset stored by an
-            older version in a shape this version doesn't recognise. {describeStored()}
-          </p>
+          {full ? (
+            <p className="crash-cause">
+              The cause is <strong>browser storage being full</strong>. Nothing is damaged. Reload, then
+              delete chats you no longer need — the ones with images take the most space. Do not clear
+              saved data for this; it is not needed. {describeStored()}
+            </p>
+          ) : (
+            <p className="crash-cause">
+              The usual cause is <strong>damaged saved data</strong> — a chat, agent or preset stored by an
+              older version in a shape this version doesn't recognise. {describeStored()}
+            </p>
+          )}
 
           <div className="crash-actions">
             <button className="primary-btn" onClick={() => location.reload()}>
@@ -140,11 +156,13 @@ export class ErrorBoundary extends Component<Props, State> {
             </button>
           </div>
 
-          <p className="crash-note">
-            Reloading is worth trying first — it costs nothing. Clearing is the reliable fix, but it
-            removes your chats, agents and API keys, so copy them out first if they matter. Your keys
-            live only in this browser, so nothing is recoverable from anywhere else.
-          </p>
+          {!full && (
+            <p className="crash-note">
+              Reloading is worth trying first — it costs nothing. Clearing is the reliable fix, but it
+              removes your chats, agents and API keys, so copy them out first if they matter. Your keys
+              live only in this browser, so nothing is recoverable from anywhere else.
+            </p>
+          )}
 
           <details className="crash-details">
             <summary>Technical detail</summary>

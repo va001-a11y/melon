@@ -1605,6 +1605,22 @@ body {
   font-size: 13px;
 }
 
+.storage-warning {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.storage-warning span {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.45;
+}
+
+.storage-warning .small-btn {
+  flex-shrink: 0;
+}
+
 .messages {
   flex: 1;
   overflow-y: auto;

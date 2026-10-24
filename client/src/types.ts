@@ -78,6 +78,12 @@ export interface Settings {
 export interface Attachment extends CoreAttachment {
   /** Original size in bytes, for display. */
   size: number;
+  /**
+   * The image was left out when the chat was saved, because browser storage
+   * was full. The name stays so the chat still says what was sent; `data` is
+   * empty, so it can never be sent again.
+   */
+  notSaved?: boolean;
 }
 
 export interface CompatEndpoint {

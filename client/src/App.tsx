@@ -23,6 +23,7 @@ import { estimateRun, formatUsd } from "./cost";
 import type { HistoryTurn } from "./api";
 import { splitCot } from "./cot";
 import { Sidebar } from "./Sidebar";
+import { trySave } from "./storage";
 import { ChatView } from "./ChatView";
 import { TopBar } from "./TopBar";
 import type { RegistryInfo } from "./types";
@@ -161,6 +162,32 @@ function normaliseChatMeta(raw: Record<string, unknown>): ChatMeta | null {
  * than drop such a block, its order is rebuilt from the responses it does have,
  * which keeps the conversation readable.
  */
+/**
+ * The same chat with the image data taken out, for when the whole chat no
+ * longer fits in browser storage. Images are what take the room — one phone
+ * photo is most of the allowance — while the text and the replies are small,
+ * and the replies are what cost money and cannot be had again. Keeping those
+ * beats keeping nothing.
+ */
+function withoutImageData(messages: Message[]): Message[] {
+  return messages.map((m) =>
+    m.kind === "user" && m.attachments?.some((a) => a.kind === "image" && a.data)
+      ? {
+          ...m,
+          attachments: m.attachments.map((a) =>
+            a.kind === "image" && a.data ? { ...a, data: "", notSaved: true } : a
+          ),
+        }
+      : m
+  );
+}
+
+/** Add or remove a key, returning the same array when nothing changes. */
+function withKey(list: string[], key: string, present: boolean): string[] {
+  if (present) return list.includes(key) ? list : [...list, key];
+  return list.includes(key) ? list.filter((k) => k !== key) : list;
+}
+
 function sanitizeMessages(raw: unknown): Message[] {
   if (!Array.isArray(raw)) return [];
   const out: Message[] = [];
@@ -317,30 +344,62 @@ export default function App() {
   const [banner, setBanner] = useState<string | null>(null);
   const runningRef = useRef(false);
 
-  useEffect(() => localStorage.setItem("melon.agents", JSON.stringify(agents)), [agents]);
-  useEffect(() => localStorage.setItem("melon.settings", JSON.stringify(settings)), [settings]);
+  /**
+   * Keys whose latest save failed, almost always because browser storage is
+   * full. While any are listed, a notice says what is not being kept. A later
+   * save of the same key that succeeds takes it off the list.
+   */
+  const [unsaved, setUnsaved] = useState<string[]>([]);
+  /** Bumped to make every save run again, e.g. after a chat is deleted to make room. */
+  const [saveAttempt, setSaveAttempt] = useState(0);
+  /** Chats that were saved, but only after their images were left out. */
+  const [imagesNotSaved, setImagesNotSaved] = useState<string[]>([]);
+  const persist = useCallback((key: string, value: unknown) => {
+    const ok = trySave(key, JSON.stringify(value));
+    setUnsaved((prev) => withKey(prev, key, !ok));
+  }, []);
+  const chatUnsaved = unsaved.includes(`melon.chat.${chatId}`);
+  // Once a chat is left, its images are gone from the screen too, so the notice no longer applies.
+  useEffect(() => setImagesNotSaved((prev) => prev.filter((k) => k === `melon.chat.${chatId}`)), [chatId]);
+  /**
+   * Leaving a chat that could not be saved throws its latest messages away,
+   * so it is the person's call, made with that in front of them.
+   */
+  const leaveUnsavedChat = (): boolean =>
+    !chatUnsaved ||
+    window.confirm(
+      "This chat could not be saved, because browser storage is full. If you leave it, " +
+        "its latest messages are lost.\n\nLeave anyway?"
+    );
+
+  useEffect(() => persist("melon.agents", agents), [agents, persist, saveAttempt]);
+  useEffect(() => persist("melon.settings", settings), [settings, persist, saveAttempt]);
   useEffect(
-    () => localStorage.setItem("melon.groupPersonalities", JSON.stringify(groupPersonalities)),
-    [groupPersonalities]
+    () => persist("melon.groupPersonalities", groupPersonalities),
+    [groupPersonalities, persist, saveAttempt]
   );
-  useEffect(() => localStorage.setItem("melon.presets", JSON.stringify(presets)), [presets]);
-  useEffect(() => localStorage.setItem("melon.teamNames", JSON.stringify(teamNames)), [teamNames]);
-  useEffect(() => localStorage.setItem("melon.teamBriefs", JSON.stringify(teamBriefs)), [teamBriefs]);
+  useEffect(() => persist("melon.presets", presets), [presets, persist, saveAttempt]);
+  useEffect(() => persist("melon.teamNames", teamNames), [teamNames, persist, saveAttempt]);
+  useEffect(() => persist("melon.teamBriefs", teamBriefs), [teamBriefs, persist, saveAttempt]);
   useEffect(() => {
-    localStorage.setItem("melon.theme", JSON.stringify(theme));
+    persist("melon.theme", theme);
     applyTheme(theme);
-  }, [theme]);
-  useEffect(() => localStorage.setItem("melon.chats.index", JSON.stringify(chatsIndex)), [chatsIndex]);
-  useEffect(() => localStorage.setItem("melon.currentChat", JSON.stringify(chatId)), [chatId]);
+  }, [theme, persist, saveAttempt]);
+  useEffect(() => persist("melon.chats.index", chatsIndex), [chatsIndex, persist, saveAttempt]);
+  useEffect(() => persist("melon.currentChat", chatId), [chatId, persist, saveAttempt]);
   useEffect(
-    () => localStorage.setItem("melon.sidebarCollapsed", JSON.stringify(sidebarCollapsed)),
-    [sidebarCollapsed]
+    () => persist("melon.sidebarCollapsed", sidebarCollapsed),
+    [sidebarCollapsed, persist, saveAttempt]
   );
 
   // Persist the current chat whenever it settles (never mid-stream).
   useEffect(() => {
     if (running || messages.length === 0) return;
-    localStorage.setItem(`melon.chat.${chatId}`, JSON.stringify(messages));
+    const key = `melon.chat.${chatId}`;
+    const whole = trySave(key, JSON.stringify(messages));
+    const textOnly = !whole && trySave(key, JSON.stringify(withoutImageData(messages)));
+    setUnsaved((prev) => withKey(prev, key, !whole && !textOnly));
+    setImagesNotSaved((prev) => withKey(prev, key, textOnly));
     setChatsIndex((prev) => {
       const existing = prev.find((c) => c.id === chatId);
       const meta: ChatMeta = {
@@ -352,7 +411,7 @@ export default function App() {
       };
       return [meta, ...prev.filter((c) => c.id !== chatId)];
     });
-  }, [messages, running, chatId]);
+  }, [messages, running, chatId, saveAttempt]);
 
   const loadRegistry = useCallback(async () => {
     try {
@@ -687,6 +746,7 @@ export default function App() {
     setMessages([]);
     setBanner(null);
     localStorage.removeItem(`melon.chat.${chatId}`);
+    setUnsaved((prev) => prev.filter((k) => k !== `melon.chat.${chatId}`));
     // Keep the chat in the list (now empty) rather than orphaning its title.
     setChatsIndex((prev) => prev.map((c) => (c.id === chatId ? { ...c, updatedAt: Date.now() } : c)));
     try {
@@ -731,10 +791,12 @@ export default function App() {
 
   const newChat = useCallback(() => {
     if (runningRef.current) return;
+    if (!leaveUnsavedChat()) return;
+    setUnsaved((prev) => prev.filter((k) => k !== `melon.chat.${chatId}`));
     setChatId(makeId());
     setMessages([]);
     setBanner(null);
-  }, []);
+  }, [chatId, chatUnsaved]);
 
   /**
    * Fork the conversation at a block: copy everything up to and including it
@@ -763,7 +825,8 @@ export default function App() {
       const index = messages.findIndex((m) => m.id === messageId);
       if (index < 0) return;
       const original = messages[index];
-      const attachments = original.kind === "user" ? original.attachments ?? [] : [];
+      // An image left out of a full chat has no data left to send.
+      const attachments = original.kind === "user" ? (original.attachments ?? []).filter((a) => !a.notSaved) : [];
       void send(text, attachments, messages.slice(0, index));
     },
     [messages, send]
@@ -782,12 +845,15 @@ export default function App() {
       const base = parentTitle.split(" ↳ ")[0];
 
       const newId = makeId();
-      try {
-        localStorage.setItem(`melon.chat.${newId}`, JSON.stringify(carried));
-      } catch {
+      if (!trySave(`melon.chat.${newId}`, JSON.stringify(carried))) {
         setBanner("Couldn't save the branch — browser storage is full or unavailable.");
         return;
       }
+      if (!leaveUnsavedChat()) {
+        localStorage.removeItem(`melon.chat.${newId}`);
+        return;
+      }
+      setUnsaved((prev) => prev.filter((k) => k !== `melon.chat.${chatId}`));
 
       setChatsIndex((prev) => [
         { id: newId, title: `${base} ↳ branch`, customTitle: true, updatedAt: Date.now() },
@@ -797,11 +863,13 @@ export default function App() {
       setMessages(carried);
       setBanner(null);
     },
-    [messages, chatsIndex, chatId]
+    [messages, chatsIndex, chatId, chatUnsaved]
   );
 
   const loadChat = useCallback((id: string) => {
     if (runningRef.current) return;
+    if (id !== chatId && !leaveUnsavedChat()) return;
+    setUnsaved((prev) => prev.filter((k) => k !== `melon.chat.${chatId}`));
     setChatId(id);
     setMessages(sanitizeMessages(loadJson<Message[]>(`melon.chat.${id}`, [])));
     setBanner(null);
@@ -811,7 +879,7 @@ export default function App() {
       if (!found) return prev;
       return [{ ...found, updatedAt: Date.now() }, ...prev.filter((c) => c.id !== id)];
     });
-  }, []);
+  }, [chatId, chatUnsaved]);
 
   const renameChat = useCallback((id: string, title: string) => {
     setChatsIndex((prev) => prev.map((c) => (c.id === id ? { ...c, title, customTitle: true } : c)));
@@ -820,11 +888,14 @@ export default function App() {
   const deleteChat = useCallback(
     (id: string) => {
       localStorage.removeItem(`melon.chat.${id}`);
+      setUnsaved((prev) => prev.filter((k) => k !== `melon.chat.${id}`));
       setChatsIndex((prev) => prev.filter((c) => c.id !== id));
       if (id === chatId) {
         setChatId(makeId());
         setMessages([]);
       }
+      // Deleting is how room gets made, so whatever could not be saved gets another go.
+      setSaveAttempt((n) => n + 1);
     },
     [chatId]
   );
@@ -973,6 +1044,16 @@ export default function App() {
           onGlobalPersonality={(v) => setSettings((s) => ({ ...s, globalPersonality: v }))}
         />
         <ChatView
+          storageNotice={
+            chatUnsaved
+              ? "chat"
+              : imagesNotSaved.includes(`melon.chat.${chatId}`)
+                ? "images"
+                : unsaved.length > 0
+                  ? "other"
+                  : null
+          }
+          onRetrySave={() => setSaveAttempt((n) => n + 1)}
           messages={messages}
           activeCount={activeAgents.length}
           recommendedMax={registry?.recommended.max ?? 6}
