@@ -140,6 +140,8 @@ Presets export as plain **`.json`** (`melon-preset-YYYY-MM-DD.json`), deliberate
 
 Chats, agents, API keys, presets, teams and settings are saved in your **browser's storage**, on your machine. They survive closing Melon, restarting the computer, and updating the app — nothing expires and there is no account.
 
+Chats are kept in the browser's IndexedDB, which has room for hundreds of megabytes, so a history full of photos is fine. Everything else is small and sits in localStorage. Chats saved by a version before 0.7.1 are moved across automatically the first time you open the new one. If your browser blocks IndexedDB, chats stay in localStorage, which holds about 5 MB per site, roughly one phone photo. When that fills, Melon saves the chat without its images rather than losing it, and tells you.
+
 The catch worth knowing: browser storage is tied to the exact address, **including the port**. Melon therefore remembers the port it used (in `.melon-ports.json`) and reuses it every launch, so your data is always where you left it. If something else has taken that port, Melon moves to another one, tells you clearly that this session will look empty, and explains how to get back.
 
 Since it is browser storage, clearing your browsing data — or using a different browser — starts you fresh. That is also why deleting Melon's folder loses nothing: the code was in the folder, your data never was.

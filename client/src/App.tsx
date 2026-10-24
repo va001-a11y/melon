@@ -24,6 +24,7 @@ import type { HistoryTurn } from "./api";
 import { splitCot } from "./cot";
 import { Sidebar } from "./Sidebar";
 import { trySave } from "./storage";
+import { getChatStore, preloadedChat } from "./chatStore";
 import { ChatView } from "./ChatView";
 import { TopBar } from "./TopBar";
 import type { RegistryInfo } from "./types";
@@ -188,6 +189,16 @@ function withKey(list: string[], key: string, present: boolean): string[] {
   return list.includes(key) ? list.filter((k) => k !== key) : list;
 }
 
+/** A stored chat, read defensively: anything unreadable is an empty chat, not a crash. */
+function parseMessages(json: string | null): Message[] {
+  if (!json) return [];
+  try {
+    return sanitizeMessages(JSON.parse(json));
+  } catch {
+    return [];
+  }
+}
+
 function sanitizeMessages(raw: unknown): Message[] {
   if (!Array.isArray(raw)) return [];
   const out: Message[] = [];
@@ -334,9 +345,25 @@ export default function App() {
   const [teamBriefs, setTeamBriefs] = useState<Record<string, string>>(() => loadStringRecord("melon.teamBriefs"));
   const [chatsIndex, setChatsIndex] = useState<ChatMeta[]>(() => loadList("melon.chats.index", normaliseChatMeta));
   const [chatId, setChatId] = useState<string>(() => loadJson("melon.currentChat", makeId()));
+  // Read from IndexedDB in main.tsx before the first render, so it is already here.
   const [messages, setMessages] = useState<Message[]>(() =>
-    sanitizeMessages(loadJson<Message[]>(`melon.chat.${loadJson("melon.currentChat", "")}`, []))
+    parseMessages(preloadedChat(loadJson("melon.currentChat", "")))
   );
+  /**
+   * Chat reads and writes go through one queue. Saves are asynchronous now,
+   * and a save that falls back to leaving images out takes two writes; without
+   * the queue an older save's second write could land after a newer save and
+   * put old messages back. Reads queue too, so reopening a chat just saved
+   * always finds what was saved.
+   */
+  const chatQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const enqueue = useCallback(<T,>(work: () => Promise<T>): Promise<T> => {
+    const next = chatQueue.current.then(work, work);
+    chatQueue.current = next.catch(() => undefined);
+    return next;
+  }, []);
+  /** Bumped by every switch of chat, so a slow load that was overtaken is dropped. */
+  const loadSeq = useRef(0);
   const [running, setRunning] = useState(false);
   const [burst, setBurst] = useState(false);
   const [registry, setRegistry] = useState<RegistryInfo | null>(null);
@@ -396,10 +423,26 @@ export default function App() {
   useEffect(() => {
     if (running || messages.length === 0) return;
     const key = `melon.chat.${chatId}`;
-    const whole = trySave(key, JSON.stringify(messages));
-    const textOnly = !whole && trySave(key, JSON.stringify(withoutImageData(messages)));
-    setUnsaved((prev) => withKey(prev, key, !whole && !textOnly));
-    setImagesNotSaved((prev) => withKey(prev, key, textOnly));
+    const id = chatId;
+    const snapshot = messages;
+    void enqueue(async () => {
+      const store = getChatStore();
+      let whole = false;
+      let textOnly = false;
+      try {
+        await store.put(id, JSON.stringify(snapshot));
+        whole = true;
+      } catch {
+        try {
+          await store.put(id, JSON.stringify(withoutImageData(snapshot)));
+          textOnly = true;
+        } catch {
+          /* reported through `unsaved` below */
+        }
+      }
+      setUnsaved((prev) => withKey(prev, key, !whole && !textOnly));
+      setImagesNotSaved((prev) => withKey(prev, key, textOnly));
+    });
     setChatsIndex((prev) => {
       const existing = prev.find((c) => c.id === chatId);
       const meta: ChatMeta = {
@@ -411,7 +454,7 @@ export default function App() {
       };
       return [meta, ...prev.filter((c) => c.id !== chatId)];
     });
-  }, [messages, running, chatId, saveAttempt]);
+  }, [messages, running, chatId, saveAttempt, enqueue]);
 
   const loadRegistry = useCallback(async () => {
     try {
@@ -745,7 +788,8 @@ export default function App() {
     if (!window.confirm("Erase every message in this chat? This cannot be undone.")) return;
     setMessages([]);
     setBanner(null);
-    localStorage.removeItem(`melon.chat.${chatId}`);
+    const erased = chatId;
+    void enqueue(() => getChatStore().remove(erased)).catch(() => undefined);
     setUnsaved((prev) => prev.filter((k) => k !== `melon.chat.${chatId}`));
     // Keep the chat in the list (now empty) rather than orphaning its title.
     setChatsIndex((prev) => prev.map((c) => (c.id === chatId ? { ...c, updatedAt: Date.now() } : c)));
@@ -755,7 +799,7 @@ export default function App() {
     } catch {
       /* the local reset is what matters here */
     }
-  }, [messages.length, chatId]);
+  }, [messages.length, chatId, enqueue]);
 
   const toggleBurst = useCallback(() => {
     if (burst) {
@@ -792,6 +836,7 @@ export default function App() {
   const newChat = useCallback(() => {
     if (runningRef.current) return;
     if (!leaveUnsavedChat()) return;
+    loadSeq.current++;
     setUnsaved((prev) => prev.filter((k) => k !== `melon.chat.${chatId}`));
     setChatId(makeId());
     setMessages([]);
@@ -833,7 +878,7 @@ export default function App() {
   );
 
   const branchFrom = useCallback(
-    (blockId: string) => {
+    async (blockId: string) => {
       if (runningRef.current) return;
 
       const cut = messages.findIndex((m) => m.id === blockId);
@@ -844,15 +889,16 @@ export default function App() {
       // Branching a branch shouldn't stack arrows forever.
       const base = parentTitle.split(" ↳ ")[0];
 
+      if (!leaveUnsavedChat()) return;
       const newId = makeId();
-      if (!trySave(`melon.chat.${newId}`, JSON.stringify(carried))) {
+      try {
+        await enqueue(() => getChatStore().put(newId, JSON.stringify(carried)));
+      } catch {
         setBanner("Couldn't save the branch — browser storage is full or unavailable.");
         return;
       }
-      if (!leaveUnsavedChat()) {
-        localStorage.removeItem(`melon.chat.${newId}`);
-        return;
-      }
+      if (runningRef.current) return;
+      loadSeq.current++;
       setUnsaved((prev) => prev.filter((k) => k !== `melon.chat.${chatId}`));
 
       setChatsIndex((prev) => [
@@ -863,23 +909,31 @@ export default function App() {
       setMessages(carried);
       setBanner(null);
     },
-    [messages, chatsIndex, chatId, chatUnsaved]
+    [messages, chatsIndex, chatId, chatUnsaved, enqueue]
   );
 
   const loadChat = useCallback((id: string) => {
     if (runningRef.current) return;
     if (id !== chatId && !leaveUnsavedChat()) return;
-    setUnsaved((prev) => prev.filter((k) => k !== `melon.chat.${chatId}`));
-    setChatId(id);
-    setMessages(sanitizeMessages(loadJson<Message[]>(`melon.chat.${id}`, [])));
-    setBanner(null);
-    // Opening a chat counts as activity, so it rises to the top of the list.
-    setChatsIndex((prev) => {
-      const found = prev.find((c) => c.id === id);
-      if (!found) return prev;
-      return [{ ...found, updatedAt: Date.now() }, ...prev.filter((c) => c.id !== id)];
-    });
-  }, [chatId, chatUnsaved]);
+    const seq = ++loadSeq.current;
+    const leaving = chatId;
+    void enqueue(() => getChatStore().get(id))
+      .catch(() => null)
+      .then((json) => {
+        // Overtaken by a later click, or a run started in the meantime.
+        if (seq !== loadSeq.current || runningRef.current) return;
+        setUnsaved((prev) => prev.filter((k) => k !== `melon.chat.${leaving}`));
+        setChatId(id);
+        setMessages(parseMessages(json));
+        setBanner(null);
+        // Opening a chat counts as activity, so it rises to the top of the list.
+        setChatsIndex((prev) => {
+          const found = prev.find((c) => c.id === id);
+          if (!found) return prev;
+          return [{ ...found, updatedAt: Date.now() }, ...prev.filter((c) => c.id !== id)];
+        });
+      });
+  }, [chatId, chatUnsaved, enqueue]);
 
   const renameChat = useCallback((id: string, title: string) => {
     setChatsIndex((prev) => prev.map((c) => (c.id === id ? { ...c, title, customTitle: true } : c)));
@@ -887,17 +941,20 @@ export default function App() {
 
   const deleteChat = useCallback(
     (id: string) => {
-      localStorage.removeItem(`melon.chat.${id}`);
       setUnsaved((prev) => prev.filter((k) => k !== `melon.chat.${id}`));
       setChatsIndex((prev) => prev.filter((c) => c.id !== id));
       if (id === chatId) {
+        loadSeq.current++;
         setChatId(makeId());
         setMessages([]);
       }
-      // Deleting is how room gets made, so whatever could not be saved gets another go.
-      setSaveAttempt((n) => n + 1);
+      // Deleting is how room gets made, so whatever could not be saved gets
+      // another go — once the delete has actually landed.
+      void enqueue(() => getChatStore().remove(id))
+        .catch(() => undefined)
+        .then(() => setSaveAttempt((n) => n + 1));
     },
-    [chatId]
+    [chatId, enqueue]
   );
 
   /** Saving a line-up records its pipeline shape too, not just who is on. */

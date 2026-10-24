@@ -1,10 +1,11 @@
 /**
  * Writing to localStorage throws when the browser's allowance is full —
  * roughly five million characters per site in Chrome, Firefox and Safari.
- * Images are stored inside chats as base64, so two ordinary phone photos are
- * enough to reach it. A throw from a save in a React effect takes the whole
- * page down to the crash screen, and the reply that triggered it, already
- * paid for, is gone. Saves therefore report failure instead of throwing, and
+ * Chats now live in IndexedDB (see chatStore.ts), but fall back to
+ * localStorage where IndexedDB is blocked, and there two ordinary phone
+ * photos are enough to reach it. A throw from a save in a React effect takes
+ * the whole page down to the crash screen, and the reply that triggered it,
+ * already paid for, is gone. Saves therefore report failure instead of throwing, and
  * the app tells the person what is not being kept.
  */
 

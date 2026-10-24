@@ -1,10 +1,13 @@
 import { sanitiseBaseUrl } from "./secrets";
+import { getChatStore } from "./chatStore";
+import type { ChatStore } from "./chatStore";
 
 /*
  * Backup and restore for everything Melon keeps.
  *
  * Melon stores nothing in its own folder: chats, agents, settings and API
- * keys all live in the browser's localStorage, scoped to the origin. That is
+ * keys all live in the browser, scoped to the origin — chats in IndexedDB,
+ * the rest in localStorage. That is
  * why deleting the Melon directory loses nothing and why a fresh copy on the
  * same port finds the old data waiting. It is also why there was no way to
  * move a chat history between machines, and why clearing browser data would
@@ -13,6 +16,11 @@ import { sanitiseBaseUrl } from "./secrets";
  * Everything is keyed under one prefix, so a backup is simply every key
  * carrying it. Collecting them generically rather than naming them means a
  * key added later is included without anyone remembering to come back here.
+ *
+ * Chats keep their old `melon.chat.<id>` keys inside the file even though
+ * they no longer live in localStorage, so a backup from this version and one
+ * from before chats moved are the same format, and either restores into
+ * either.
  */
 const PREFIX = "melon.";
 const CHAT_PREFIX = "melon.chat.";
@@ -139,17 +147,22 @@ function holdsKeys(raw: string | undefined): boolean {
   return agents.some((a) => typeof a.apiKey === "string" && a.apiKey.trim() !== "");
 }
 
-export function collectBackup(
+export async function collectBackup(
   scope: BackupScope,
   includeKeys: boolean,
-  store: Storage = localStorage
-): Backup {
+  store: Storage = localStorage,
+  chats: ChatStore = getChatStore()
+): Promise<Backup> {
   const data: Record<string, string> = {};
   for (let i = 0; i < store.length; i++) {
     const key = store.key(i);
-    if (!key || !inScope(key, scope)) continue;
+    // Chats come from the chat store below, wherever it keeps them.
+    if (!key || key.startsWith(CHAT_PREFIX) || !inScope(key, scope)) continue;
     const value = store.getItem(key);
     if (value !== null) data[key] = value;
+  }
+  if (scope !== "agents") {
+    for (const [id, json] of Object.entries(await chats.all())) data[CHAT_PREFIX + id] = json;
   }
 
   if (!includeKeys && data[AGENTS_KEY]) data[AGENTS_KEY] = withoutSecrets(data[AGENTS_KEY]);
@@ -228,29 +241,53 @@ export function describeBackup(text: string): BackupSummary {
  * neither: the current chats gone and the backup half-applied. What was
  * there is held in memory first and put back if any write fails, and the
  * error is rethrown for the caller to report.
+ *
+ * Settings and agents are written first, because they can be put back by
+ * hand. The chats go last, in one step that either lands whole or changes
+ * nothing, and if they fail the settings and agents are put back too.
  */
-export function applyBackup(backup: Backup, store: Storage = localStorage): void {
+export async function applyBackup(
+  backup: Backup,
+  store: Storage = localStorage,
+  chats: ChatStore = getChatStore()
+): Promise<void> {
   const scope: BackupScope =
     backup.scope === "agents" || backup.scope === "chats" ? backup.scope : "everything";
 
   const previous = new Map<string, string>();
   for (let i = 0; i < store.length; i++) {
     const key = store.key(i);
-    if (key && inScope(key, scope)) previous.set(key, store.getItem(key) ?? "");
+    if (key && !key.startsWith(CHAT_PREFIX) && inScope(key, scope)) previous.set(key, store.getItem(key) ?? "");
   }
-  for (const key of previous.keys()) store.removeItem(key);
   const written: string[] = [];
+  const putBack = () => {
+    for (const key of written) store.removeItem(key);
+    // This fitted before, and the half-written backup is gone again, so it fits now.
+    for (const [key, value] of previous) store.setItem(key, value);
+  };
+
+  for (const key of previous.keys()) store.removeItem(key);
   try {
     for (const [key, value] of Object.entries(backup.data)) {
-      if (inScope(key, scope) && typeof value === "string") {
+      if (!key.startsWith(CHAT_PREFIX) && inScope(key, scope) && typeof value === "string") {
         store.setItem(key, value);
         written.push(key);
       }
     }
   } catch (error) {
-    for (const key of written) store.removeItem(key);
-    // This fitted before, and the half-written backup is gone again, so it fits now.
-    for (const [key, value] of previous) store.setItem(key, value);
+    putBack();
+    throw error;
+  }
+
+  if (scope === "agents") return;
+  const incoming: Record<string, string> = {};
+  for (const [key, value] of Object.entries(backup.data)) {
+    if (key.startsWith(CHAT_PREFIX) && typeof value === "string") incoming[key.slice(CHAT_PREFIX.length)] = value;
+  }
+  try {
+    await chats.replaceAll(incoming);
+  } catch (error) {
+    putBack();
     throw error;
   }
 }

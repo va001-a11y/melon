@@ -35,8 +35,14 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
     chats: "chats",
   };
 
-  const download = (withKeys: boolean) => {
-    const backup = collectBackup(scope, withKeys);
+  const download = async (withKeys: boolean) => {
+    let backup;
+    try {
+      backup = await collectBackup(scope, withKeys);
+    } catch {
+      setNote("Couldn't read your chats to export them. Nothing was downloaded.");
+      return;
+    }
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -73,10 +79,10 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
     setPending(summary);
   };
 
-  const restore = () => {
+  const restore = async () => {
     if (!pending?.backup) return;
     try {
-      applyBackup(pending.backup);
+      await applyBackup(pending.backup);
     } catch (error) {
       setPending(null);
       setNote(
@@ -441,7 +447,7 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
 
           <div className="backup-row">
             {scope === "chats" ? (
-              <button className="small-btn" onClick={() => download(false)}>
+              <button className="small-btn" onClick={() => void download(false)}>
                 Export chats
               </button>
             ) : (
@@ -466,7 +472,7 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
                 in there.
               </p>
               <div className="backup-row">
-                <button className="small-btn danger" onClick={() => download(true)}>
+                <button className="small-btn danger" onClick={() => void download(true)}>
                   I understand — download it with my keys
                 </button>
                 <button className="small-btn" onClick={() => setArmedForKeys(false)}>

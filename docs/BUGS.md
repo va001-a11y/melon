@@ -1213,6 +1213,20 @@ write fails, so a restore either completes or changes nothing.
 tested because nobody fills five megabytes while developing. A user with a
 phone camera does it in two messages.
 
+### And then the cause was removed
+
+Everything above stops the damage; it does not give back the room. In the
+same release, chats moved to IndexedDB, whose allowance is a share of the
+disk rather than five megabytes, and three 3 MB photos in one chat saved
+whole. Chats from older versions are moved across on first start, in one
+transaction, and only removed from localStorage once it has committed.
+localStorage stays as the fallback for browsers that block IndexedDB, which
+is the only place the handling above is still likely to be needed.
+
+Moving exposed one more bug: chat search ran over the stored JSON, so a
+three-letter query matched somewhere in the base64 of almost any saved photo.
+It searches only the words of questions and replies now.
+
 ---
 
 ## Testing notes that cost time to learn

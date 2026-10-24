@@ -1,6 +1,7 @@
 import { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import { isQuotaError } from "./storage";
+import { CHAT_KEY_PREFIX, getChatStore } from "./chatStore";
 
 /**
  * Melon keeps everything in localStorage, which means a single malformed value
@@ -46,7 +47,14 @@ function describeStored(): string {
   const keys = melonKeys();
   if (keys.length === 0) return "Melon has nothing saved in this browser.";
 
-  const chats = keys.filter((k) => k.startsWith(`${MELON_PREFIX}chat.`)).length;
+  // Chats are not in localStorage any more; the chat list says how many there are.
+  let chats = 0;
+  try {
+    const index = JSON.parse(localStorage.getItem(`${MELON_PREFIX}chats.index`) ?? "[]");
+    if (Array.isArray(index)) chats = index.length;
+  } catch {
+    /* unreadable — leave the count at zero rather than guessing */
+  }
 
   let agents = 0;
   try {
@@ -85,6 +93,11 @@ export class ErrorBoundary extends Component<Props, State> {
     const dump: Record<string, string | null> = {};
     for (const key of melonKeys()) dump[key] = localStorage.getItem(key);
     try {
+      for (const [id, json] of Object.entries(await getChatStore().all())) dump[CHAT_KEY_PREFIX + id] = json;
+    } catch {
+      // The chat store may be what is broken; settings and agents are still worth having.
+    }
+    try {
       await navigator.clipboard.writeText(JSON.stringify(dump, null, 2));
       alert("Saved data copied to the clipboard. Paste it somewhere safe before clearing.");
     } catch {
@@ -93,7 +106,7 @@ export class ErrorBoundary extends Component<Props, State> {
     }
   };
 
-  private clearAndReload = (): void => {
+  private clearAndReload = async (): Promise<void> => {
     const keys = melonKeys();
     // Same wording as the panel, so the confirmation cannot say something
     // different from what the user just read.
@@ -106,6 +119,16 @@ export class ErrorBoundary extends Component<Props, State> {
       for (const key of keys) localStorage.removeItem(key);
     } catch {
       // Nothing useful left to do; the reload below is still worth attempting.
+    }
+    try {
+      await getChatStore().replaceAll({});
+    } catch {
+      // If the store will not even clear, remove the database outright.
+      try {
+        indexedDB.deleteDatabase("melon");
+      } catch {
+        /* the reload is still worth attempting */
+      }
     }
     location.reload();
   };
@@ -151,7 +174,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <button className="small-btn" onClick={this.copyData} disabled={keyCount === 0}>
               Copy my data first
             </button>
-            <button className="stop-btn crash-clear" onClick={this.clearAndReload} disabled={keyCount === 0}>
+            <button className="stop-btn crash-clear" onClick={() => void this.clearAndReload()} disabled={keyCount === 0}>
               Clear saved data and restart
             </button>
           </div>

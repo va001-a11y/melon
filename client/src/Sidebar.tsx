@@ -5,6 +5,7 @@ import { ContextMenu } from "./ContextMenu";
 import type { MenuItem } from "./ContextMenu";
 import { webSearchBlockReason } from "@melon/core";
 import { AgentForm, EMPTY_DRAFT, draftFromAgent } from "./AgentForm";
+import { getChatStore } from "./chatStore";
 import type { AgentDraft } from "./AgentForm";
 
 interface Props {
@@ -41,6 +42,26 @@ interface MenuState {
   x: number;
   y: number;
   items: MenuItem[];
+}
+
+/** The words of a stored chat — questions and replies, lowercased — without the attachment data. */
+function searchableText(json: string): string {
+  try {
+    const messages = JSON.parse(json);
+    if (!Array.isArray(messages)) return "";
+    const parts: string[] = [];
+    for (const m of messages) {
+      if (typeof m?.text === "string") parts.push(m.text);
+      if (m?.responses && typeof m.responses === "object") {
+        for (const r of Object.values(m.responses as Record<string, { text?: unknown }>)) {
+          if (typeof r?.text === "string") parts.push(r.text);
+        }
+      }
+    }
+    return parts.join("\n").toLowerCase();
+  } catch {
+    return "";
+  }
 }
 
 export function Sidebar(props: Props) {
@@ -104,22 +125,36 @@ export function Sidebar(props: Props) {
   }, [foldedTeams]);
 
   /**
-   * Search titles and message text. Chats live in localStorage, so their
-   * contents are read directly — a title-only search is close to useless
-   * once you have more than a handful of conversations.
+   * Search titles and message text — a title-only search is close to useless
+   * once you have more than a handful of conversations. Chats are read from
+   * the chat store once a search starts, and only the words are searched:
+   * the old search ran over the stored JSON, so a three-letter query matched
+   * somewhere in the base64 of almost any saved photo.
    */
+  const searching = chatQuery.trim() !== "";
+  const [chatText, setChatText] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!searching) return;
+    let live = true;
+    void getChatStore()
+      .all()
+      .then((all) => {
+        if (!live) return;
+        const text: Record<string, string> = {};
+        for (const [id, json] of Object.entries(all)) text[id] = searchableText(json);
+        setChatText(text);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [searching, chats]);
+
   const visibleChats = useMemo(() => {
     const q = chatQuery.trim().toLowerCase();
     if (!q) return chats;
-    return chats.filter((c) => {
-      if (c.title.toLowerCase().includes(q)) return true;
-      try {
-        return (localStorage.getItem(`melon.chat.${c.id}`) ?? "").toLowerCase().includes(q);
-      } catch {
-        return false;
-      }
-    });
-  }, [chats, chatQuery]);
+    return chats.filter((c) => c.title.toLowerCase().includes(q) || (chatText[c.id] ?? "").includes(q));
+  }, [chats, chatQuery, chatText]);
 
   /*
    * Web search across the whole line-up, in one click.
