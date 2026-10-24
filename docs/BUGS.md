@@ -1256,7 +1256,7 @@ It searches only the words of questions and replies now.
   written for v0.6.0 lived in a temporary directory that was later cleaned
   out, and when they were needed again to check a change, they were gone. A
   test only protects a fix if it survives long enough to be run again. Since
-  v0.7.1 they live in `tests/`, run on every push, and gate every release.
+  2026-10-24 they live in `tests/`, run on every push, and gate every release.
 - **Prove a test can fail.** A test that has only ever passed may be unable
   to fail. When the suite was set up, four fixes were undone on purpose —
   the search-key leak, the recited end-marker, the unrolled-back restore,
