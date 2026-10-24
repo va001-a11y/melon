@@ -346,6 +346,19 @@ five recurring mistakes rather than isolated accidents.
 Its companion, [`docs/FEATURES.md`](docs/FEATURES.md), logs what each release
 added, changed or removed, and why.
 
+### Tests
+
+```
+npm test
+```
+
+The suite in `tests/` runs in about half a minute with no network and no
+keys: every outside service is replaced by a stand-in. Most tests are a bug
+that shipped, named after the release it was fixed in, so a change that
+brings one back fails here rather than for a user. GitHub runs it on every
+push, and neither the Docker image nor the web version is published unless
+it passes.
+
 ## Adding models
 
 Pick a provider from the grouped list, **type the model id exactly** as the provider writes it (lower case, dashes instead of spaces — e.g. `llama-3.3-70b-versatile`), paste your key, and press **Test connection** before saving.

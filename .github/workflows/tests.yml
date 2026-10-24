@@ -1,0 +1,39 @@
+name: Tests
+
+# Runs the suite in tests/ on every push and pull request.
+#
+# Each test is a bug that shipped, or one caught just before it did — a
+# keyless backup that kept the search key, a restore that deleted data when
+# it ran out of room, a model reciting its format and cutting its own answer
+# in half. A fix with no test can be quietly undone by the next change, and
+# the backup leak survived four releases for want of one.
+#
+# The release workflows (Container image, Deploy web version) call this too,
+# and publish nothing unless it passes.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # No network, no keys: every service is replaced by a stand-in, so a
+      # slow third party can never fail the build.
+      - run: npm test

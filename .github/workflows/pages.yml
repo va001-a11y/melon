@@ -28,7 +28,12 @@ concurrency:
 # GitHub is retiring on its runners. Note the majors differ: checkout and
 # setup-node are on v7, the two Pages actions on v5.
 jobs:
+  # Nothing is deployed unless the test suite passes.
+  tests:
+    uses: ./.github/workflows/tests.yml
+
   build:
+    needs: tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

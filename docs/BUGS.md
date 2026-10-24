@@ -1255,7 +1255,13 @@ It searches only the words of questions and replies now.
 - **A test in a scratch folder is not a regression test.** The backup tests
   written for v0.6.0 lived in a temporary directory that was later cleaned
   out, and when they were needed again to check a change, they were gone. A
-  test only protects a fix if it survives long enough to be run again.
+  test only protects a fix if it survives long enough to be run again. Since
+  v0.7.1 they live in `tests/`, run on every push, and gate every release.
+- **Prove a test can fail.** A test that has only ever passed may be unable
+  to fail. When the suite was set up, four fixes were undone on purpose —
+  the search-key leak, the recited end-marker, the unrolled-back restore,
+  limiting search results before filtering them — and each was caught by the
+  test written for it before the fix was put back.
 - **Verify scripted edits by grepping for the inserted text.** The single most
   expensive bug in this project came from trusting a script that reported
   success without having matched anything.

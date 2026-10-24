@@ -203,8 +203,15 @@ jobs:
         if: always()
         run: docker logs melon-ci || true
 
+  # The test suite, run before anything is published. On a branch push the
+  # Tests workflow runs it already, so here it runs for tags only.
+  tests:
+    if: startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/tests.yml
+
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
+    needs: tests
     runs-on: ubuntu-latest
     permissions:
       contents: read

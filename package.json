@@ -15,9 +15,11 @@
     "start": "npm run start -w server",
     "melon": "node scripts/launch.mjs",
     "package": "node scripts/package.mjs",
-    "web": "npm run dev:web -w client"
+    "web": "npm run dev:web -w client",
+    "test": "node --import tsx --test \"tests/**/*.test.ts\""
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.2"
   }
 }
