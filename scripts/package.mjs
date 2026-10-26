@@ -29,6 +29,8 @@ const INCLUDE = [
   "core/package.json",
   "core/tsconfig.json",
   "client/src",
+  // The tab and home-screen icons, which index.html links to.
+  "client/public",
   "client/index.html",
   "client/package.json",
   "client/tsconfig.json",
@@ -39,6 +41,8 @@ const INCLUDE = [
   "server/package.json",
   "server/tsconfig.json",
   "scripts",
+  // The README tells you to run `npm test`; it needs something to run.
+  "tests",
   "package.json",
   "package-lock.json",
   "README.md",
@@ -50,6 +54,13 @@ const INCLUDE = [
   "Melon.bat",
   "melon.command",
 ];
+
+/**
+ * Tracked files deliberately left out. The zip is the desktop download:
+ * Docker users pull the published image, and the workflows only mean
+ * anything on GitHub.
+ */
+const EXCLUDE = [".github", "Dockerfile", ".dockerignore", "docker-compose.yml"];
 
 function human(bytes) {
   return bytes > 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
@@ -88,6 +99,34 @@ if (missing.length > 0) {
   Refusing to package: package.json declares workspace(s) ${missing.join(", ")} ` +
       `which the INCLUDE list does not cover.
   Add them to scripts/package.mjs, or the zip will fail on npm install.
+`
+  );
+  process.exit(1);
+}
+
+/*
+ * Refuse to ship an archive that silently omits a tracked file. INCLUDE is a
+ * list kept by hand, and twice something new missed it: the core workspace
+ * (above), then the tab icons in client/public, whose absence nothing
+ * reported — the page simply asked for icons the zip did not contain. Every
+ * tracked file must now be either included or excluded on purpose.
+ *
+ * Skipped, with a warning, where git is unavailable.
+ */
+const covered = (file, list) => list.some((entry) => file === entry || file.startsWith(`${entry}/`));
+let tracked = null;
+try {
+  tracked = execFileSync("git", ["ls-files"], { cwd: PLATFORM_DIR, encoding: "utf8" }).split(/\r?\n/).filter(Boolean);
+} catch {
+  console.warn("  git is unavailable, so the zip was not checked for left-out files.");
+}
+const unlisted = (tracked ?? []).filter((f) => !covered(f, INCLUDE) && !covered(f, EXCLUDE));
+if (unlisted.length > 0) {
+  console.error(
+    `
+  Refusing to package: these tracked files are in neither INCLUDE nor EXCLUDE:
+    ${unlisted.join("\n    ")}
+  Add each to one of the two lists in scripts/package.mjs.
 `
   );
   process.exit(1);
