@@ -10,6 +10,21 @@ reason is the part that is hard to recover later.
 
 ---
 
+## v0.7.2 — 2026-10-26
+
+**A tab icon.** Browsers showed their grey placeholder globe for Melon, so
+it was the one tab in the bar you could not pick out. The icon is the 🍈
+from the top bar, redrawn so it looks the same on every device, tilted and
+shaded blue to red. Every design was judged at 16px, the size it is
+actually seen at: a cantaloupe-net design that stood for models working
+together was set aside because at that size it looked like the placeholder
+globe itself. iPhones get their own PNG for the home screen.
+
+**A test suite that gates every release.** `npm test` runs 69 tests, each
+one a bug that shipped or nearly did. They run on every push, and the
+Docker image and the hosted site publish nothing unless they pass. See the
+README's Tests section.
+
 ## v0.7.1 — 2026-10-24
 
 **Chats are stored in IndexedDB.** localStorage holds about five million
