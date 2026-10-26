@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Melon's tab icon: the 🍈 redrawn, turned 18.2° clockwise, blue to red.
+       The gradient is counter-rotated so it runs left to right on screen
+       rather than along the tilted melon. -->
+  <defs>
+    <linearGradient id="rind" gradientUnits="userSpaceOnUse" x1="4.5" y1="18.5" x2="27.5" y2="18.5" gradientTransform="rotate(-18.2 16 18.5)">
+      <stop offset="0" stop-color="#2f6fd6"/>
+      <stop offset="1" stop-color="#d63a3a"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(0 -1.3) rotate(18.2 16 18.5)">
+    <path d="M16 7.2 C16.6 5.4 17.6 4 19.2 3.2" stroke="#8a6a4a" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+    <path d="M17.6 6.4 C20.2 3.4 24.6 3.6 26 4.8 C24 7.4 20.6 8 17.6 6.4 Z" fill="#8fb79a"/>
+    <circle cx="16" cy="18.5" r="11.5" fill="url(#rind)"/>
+    <g stroke="#000" stroke-opacity=".22" stroke-width="1.7" fill="none">
+      <path d="M11 8.6 C7.6 13.6 7.6 23.4 11 28.4"/>
+      <path d="M16 7 C14.4 13 14.4 24 16 30"/>
+      <path d="M21 8.6 C24.4 13.6 24.4 23.4 21 28.4"/>
+    </g>
+    <ellipse cx="11.2" cy="13.4" rx="2.6" ry="1.6" fill="#fff" opacity=".35" transform="rotate(-35 11.2 13.4)"/>
+  </g>
+</svg>
