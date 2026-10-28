@@ -9,6 +9,7 @@ import type { BackupScope, BackupSummary } from "./backup";
 import { DESKTOP_URL, SUPPORT_LABEL, SUPPORT_URL } from "./config";
 import { RUNS_LOCALLY } from "./target";
 import { MAX_ROUNDS, SEARCH_PROVIDERS, getSearchProvider } from "@melon/core";
+import { MIN_PASSPHRASE, resealStored, vaultOpen, vaultSupported } from "./vault";
 
 interface Props {
   settings: SettingsType;
@@ -17,10 +18,28 @@ interface Props {
   onTheme: (choice: ThemeChoice) => void;
   /** True when agents are split across teams, which changes what parallel means. */
   hasPipeline: boolean;
+  /** Whether API keys are locked with a passphrase. */
+  keyLock: boolean;
+  /** Turns the lock on, or changes the passphrase if it is already on. Rejects if it could not be saved. */
+  onSetPassphrase: (passphrase: string) => Promise<void>;
+  /** Stores the keys in plain text again. Throws if they could not be saved. */
+  onRemoveLock: () => void;
+  onLockNow: () => void;
   onClose: () => void;
 }
 
-export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPipeline }: Props) {
+export function Settings({
+  settings,
+  onSettings,
+  theme,
+  onTheme,
+  onClose,
+  hasPipeline,
+  keyLock,
+  onSetPassphrase,
+  onRemoveLock,
+  onLockNow,
+}: Props) {
   // Keep the "Match my system" description truthful if the device changes.
 
   const fileRef = useRef<HTMLInputElement>(null);
@@ -28,6 +47,58 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
   const [armedForKeys, setArmedForKeys] = useState(false);
   const [pending, setPending] = useState<BackupSummary | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [choosingPassphrase, setChoosingPassphrase] = useState(false);
+  const [passphrase, setPassphrase] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [lockBusy, setLockBusy] = useState(false);
+  const [lockProblem, setLockProblem] = useState<string | null>(null);
+  const [lockNote, setLockNote] = useState<string | null>(null);
+
+  const closePassphraseForm = () => {
+    setChoosingPassphrase(false);
+    setPassphrase("");
+    setConfirmation("");
+    setLockProblem(null);
+  };
+
+  const openPassphraseForm = () => {
+    setLockNote(null);
+    setChoosingPassphrase(true);
+  };
+
+  const savePassphrase = async () => {
+    if (passphrase.length < MIN_PASSPHRASE) {
+      setLockProblem(`Use at least ${MIN_PASSPHRASE} characters. Longer is better: a short one is easy to guess.`);
+      return;
+    }
+    if (passphrase !== confirmation) {
+      setLockProblem("The two passphrases do not match.");
+      return;
+    }
+    setLockBusy(true);
+    const changing = keyLock;
+    try {
+      await onSetPassphrase(passphrase);
+      closePassphraseForm();
+      setLockNote(
+        changing ? "Passphrase changed." : "Your keys are locked. Melon will ask for the passphrase next time it opens."
+      );
+    } catch {
+      setLockProblem("The lock could not be saved, so nothing changed. Browser storage may be full.");
+    } finally {
+      setLockBusy(false);
+    }
+  };
+
+  const removeLock = () => {
+    if (!window.confirm("Store your API keys in this browser as plain text again?")) return;
+    try {
+      onRemoveLock();
+      setLockNote("The lock is off. Your keys are stored as plain text again.");
+    } catch {
+      setLockNote("The lock could not be turned off, so it is still on. Browser storage may be full.");
+    }
+  };
 
   const SCOPE_WORD: Record<BackupScope, string> = {
     everything: "backup",
@@ -92,6 +163,10 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
       );
       return;
     }
+    // Locked: whatever keys the backup brought are now in plain text. Seal
+    // them, so restoring never quietly turns the lock off. If this fails the
+    // next unlock picks them up, so the restore itself still stands.
+    if (vaultOpen()) await resealStored().catch(() => undefined);
     // Every piece of state in memory is now stale. Reloading is the honest
     // way to adopt the restored data rather than reconciling it by hand.
     window.location.reload();
@@ -412,6 +487,98 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
         </section>
 
         <section className="settings-section">
+          <h3>Lock your API keys</h3>
+          {!vaultSupported() ? (
+            <small className="backup-note">
+              Locking needs HTTPS or localhost. This address is plain HTTP, where browsers do not allow
+              the encryption it uses, and where your keys also cross the network unencrypted. See
+              "Using Melon from your phone or another computer" in the README.
+            </small>
+          ) : keyLock ? (
+            <>
+              <small className="backup-note">
+                Your keys are encrypted with your passphrase. Melon asks for it each time it opens and
+                forgets it when you close the tab. Chats, agents and settings are not encrypted.
+              </small>
+              {!choosingPassphrase && (
+                <div className="backup-row">
+                  <button className="small-btn" onClick={onLockNow}>
+                    Lock now
+                  </button>
+                  <button className="small-btn" onClick={openPassphraseForm}>
+                    Change passphrase…
+                  </button>
+                  <button className="small-btn danger" onClick={removeLock}>
+                    Turn off
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <small className="backup-note">
+                Your keys are stored in this browser as plain text. Locking encrypts them with a
+                passphrase that Melon asks for each time it opens. Nobody can recover a forgotten
+                passphrase, including you: you would paste your keys in again from each provider's
+                website.
+              </small>
+              {!choosingPassphrase && (
+                <div className="backup-row">
+                  <button className="small-btn" onClick={openPassphraseForm}>
+                    Lock with a passphrase…
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+
+          {choosingPassphrase && (
+            <form
+              className="key-lock-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void savePassphrase();
+              }}
+            >
+              <input
+                type="password"
+                autoComplete="new-password"
+                aria-label={keyLock ? "New passphrase" : "Passphrase"}
+                placeholder={keyLock ? "New passphrase" : "Passphrase"}
+                value={passphrase}
+                disabled={lockBusy}
+                onChange={(e) => setPassphrase(e.target.value)}
+                autoFocus
+              />
+              <input
+                type="password"
+                autoComplete="new-password"
+                aria-label="Type it again"
+                placeholder="Type it again"
+                value={confirmation}
+                disabled={lockBusy}
+                onChange={(e) => setConfirmation(e.target.value)}
+              />
+              {lockProblem && (
+                <small className="key-lock-problem" role="alert">
+                  {lockProblem}
+                </small>
+              )}
+              <div className="backup-row">
+                <button className="small-btn" type="submit" disabled={lockBusy || !passphrase || !confirmation}>
+                  {lockBusy ? "Encrypting…" : keyLock ? "Change passphrase" : "Lock my keys"}
+                </button>
+                <button className="small-btn" type="button" onClick={closePassphraseForm} disabled={lockBusy}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+
+          {lockNote && <small className="backup-note">{lockNote}</small>}
+        </section>
+
+        <section className="settings-section">
           <h3>Backup and restore</h3>
           <small className="backup-note">
             Melon keeps your chats, agents, settings and API keys in this browser, not in
@@ -464,7 +631,10 @@ export function Settings({ settings, onSettings, theme, onTheme, onClose, hasPip
 
           {armedForKeys && (
             <div className="backup-warning">
-              <strong>This file will contain your API keys, in plain text.</strong>
+              <strong>
+                This file will contain your API keys, in plain text
+                {keyLock ? ", even though they are locked here" : ""}.
+              </strong>
               <p>{KEY_WARNING}</p>
               <p>
                 Anyone who opens it can spend money on your accounts. If you only want to move

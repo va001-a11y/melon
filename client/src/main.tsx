@@ -3,6 +3,8 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { initChatStore } from "./chatStore";
+import { readVault } from "./vault";
+import { Unlock } from "./Unlock";
 import { DEFAULT_THEME_CHOICE, applyTheme, migrateThemeChoice } from "./themes";
 import "./styles.css";
 
@@ -37,13 +39,31 @@ function currentChatId(): string {
  * starts with the open chat already in hand rather than flashing empty.
  */
 void initChatStore(currentChatId()).then(() => {
-  ReactDOM.createRoot(document.getElementById("root")!).render(
-    <React.StrictMode>
-      {/* Outermost, so a throw anywhere below shows a recovery screen rather
-          than the blank page React leaves behind by default. */}
-      <ErrorBoundary>
-        <App />
-      </ErrorBoundary>
-    </React.StrictMode>
-  );
+  const root = ReactDOM.createRoot(document.getElementById("root")!);
+  const start = () =>
+    root.render(
+      <React.StrictMode>
+        {/* Outermost, so a throw anywhere below shows a recovery screen rather
+            than the blank page React leaves behind by default. */}
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+      </React.StrictMode>
+    );
+
+  /*
+   * With the passphrase lock on, App does not start until the keys are
+   * unlocked or deliberately given up — so nothing can run on missing keys,
+   * and App's first render already holds them.
+   */
+  const locked = readVault();
+  if (locked) {
+    root.render(
+      <React.StrictMode>
+        <Unlock record={locked} onDone={start} />
+      </React.StrictMode>
+    );
+  } else {
+    start();
+  }
 });

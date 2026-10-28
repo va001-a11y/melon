@@ -267,6 +267,14 @@ For the hosted version this means something worth stating outright: **using it i
 
 **If that matters to you, run it from source.** Clone the repository, read what you are about to run, and start it yourself. Then the only parties are you and your model provider, which is the arrangement the rest of this section describes.
 
+**Lock your keys with a passphrase.** By default, keys are stored in the browser as plain text. *Settings → Lock your API keys* encrypts them (AES-256, with a key derived from your passphrase by PBKDF2 at 600,000 rounds), and Melon then asks for the passphrase each time it opens. The passphrase is never stored; it is held in memory until you close the tab or press *Lock now*. The lock is remembered by the browser like everything else, so it stays on across restarts until you turn it off.
+
+- **It protects against** someone using your computer or browser profile, software that copies browser data off the disk, and, on the hosted build, another page on the same origin reading Melon's storage while Melon is closed.
+- **It does not protect against** anything running inside Melon's page while it is unlocked. At that point the keys are in use, and the page can read them. Chats, agents and settings are not encrypted.
+- **A forgotten passphrase cannot be recovered**, by you or anyone else. The unlock screen offers to open Melon without the keys, keeping everything else, and you paste them in again from each provider's website.
+- **Backups never carry the lock.** *Export with API keys* writes them in plain text, as it always has. Restoring a backup while the lock is on encrypts whatever keys the backup brings, so the lock stays on.
+- **It needs HTTPS or `localhost`.** Browsers only provide the encryption it uses there, so it is unavailable at a plain `http://192.168.x.x` address. See *Using Melon from your phone or another computer*.
+
 **The rule that follows from this: nothing else gets published to that origin.** Other projects go on a separate account, an organisation, or their own domain. Browser storage cannot tell one page on an origin from another, so a second site there would sit next to Melon's keys whether or not anyone intended it to.
 
 And if something else ever does share the origin, the narrower rule is **no third-party scripts on it**. A third-party script is a `<script src="…">` pointing at a domain you do not control — analytics, a chat widget, a comment system, an ad tag, a library pulled from a CDN. It runs *inside* the page rather than in a sandbox, so it can read everything the page can, including another site's stored keys. It does not need to be malicious to be a problem; it needs only to be compromised once. The same applies, less visibly, to an npm package bundled into a build: after bundling it is indistinguishable from your own code and has the same access. An `<iframe>` is different — it runs in its own origin and cannot reach your storage.

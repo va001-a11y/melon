@@ -1,6 +1,8 @@
 import { sanitiseBaseUrl } from "./secrets";
 import { getChatStore } from "./chatStore";
 import type { ChatStore } from "./chatStore";
+import { VAULT_KEY, liveSecrets, withAgentKeys, withSearchKeys } from "./vault";
+import type { Secrets } from "./vault";
 
 /*
  * Backup and restore for everything Melon keeps.
@@ -52,6 +54,13 @@ const AGENT_KEYS = ["melon.agents", "melon.presets", "melon.teamNames", "melon.t
 /** Whether a stored key belongs to a scope. */
 export function inScope(key: string, scope: BackupScope): boolean {
   if (!key.startsWith(PREFIX)) return false;
+  /*
+   * The passphrase lock belongs to this browser, never to a backup. Restoring
+   * a file carrying one would demand whatever passphrase was in use when it
+   * was made, and a keyless export carrying it would not be keyless. Keys
+   * travel the way they always have: in plain text, and only when asked for.
+   */
+  if (key === VAULT_KEY) return false;
   if (scope === "everything") return true;
   if (scope === "chats") return key.startsWith(CHAT_PREFIX) || CHAT_KEYS.includes(key);
   return AGENT_KEYS.includes(key);
@@ -151,7 +160,9 @@ export async function collectBackup(
   scope: BackupScope,
   includeKeys: boolean,
   store: Storage = localStorage,
-  chats: ChatStore = getChatStore()
+  chats: ChatStore = getChatStore(),
+  /** The unlocked keys, while the passphrase lock has them out of storage. */
+  secrets: Secrets | null = liveSecrets()
 ): Promise<Backup> {
   const data: Record<string, string> = {};
   for (let i = 0; i < store.length; i++) {
@@ -165,6 +176,15 @@ export async function collectBackup(
     for (const [id, json] of Object.entries(await chats.all())) data[CHAT_PREFIX + id] = json;
   }
 
+  if (includeKeys && secrets) {
+    const agents = parseAgents(data[AGENTS_KEY]);
+    if (agents) data[AGENTS_KEY] = JSON.stringify(withAgentKeys(agents as { id: string; apiKey?: string }[], secrets));
+    const settings = parseSettings(data[SETTINGS_KEY]);
+    if (settings) {
+      const stored = (settings.searchApiKeys ?? {}) as Record<string, string>;
+      data[SETTINGS_KEY] = JSON.stringify({ ...settings, searchApiKeys: withSearchKeys(stored, secrets) });
+    }
+  }
   if (!includeKeys && data[AGENTS_KEY]) data[AGENTS_KEY] = withoutSecrets(data[AGENTS_KEY]);
   if (!includeKeys && data[SETTINGS_KEY]) data[SETTINGS_KEY] = settingsWithoutSecrets(data[SETTINGS_KEY]);
 

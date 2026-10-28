@@ -25,6 +25,19 @@ import { splitCot } from "./cot";
 import { Sidebar } from "./Sidebar";
 import { trySave } from "./storage";
 import { getChatStore, preloadedChat } from "./chatStore";
+import {
+  VAULT_KEY,
+  adoptSession,
+  endSession,
+  liveSecrets,
+  newSession,
+  seal,
+  secretsOf,
+  vaultOpen,
+  withAgentKeys,
+  withSearchKeys,
+  withoutAgentKeys,
+} from "./vault";
 import { ChatView } from "./ChatView";
 import { TopBar } from "./TopBar";
 import type { RegistryInfo } from "./types";
@@ -287,7 +300,11 @@ function charsOf(list: Message[]): number {
 }
 
 export default function App() {
-  const [agents, setAgents] = useState<Agent[]>(() => loadList("melon.agents", normaliseAgent));
+  // While the passphrase lock is on, stored agents carry no keys; the
+  // unlock screen has already decrypted them, and they go back on here.
+  const [agents, setAgents] = useState<Agent[]>(() =>
+    withAgentKeys(loadList("melon.agents", normaliseAgent), liveSecrets())
+  );
   const [settings, setSettings] = useState<Settings>(() => {
     const stored = { ...DEFAULT_SETTINGS, ...loadJson<Partial<Settings>>("melon.settings", {}) };
     // "Meme / Creative" became "Creative". Without this the saved key would
@@ -302,6 +319,7 @@ export default function App() {
       stored.searchApiKeys[stored.searchProvider] = legacy;
     }
     delete (stored as { searchApiKey?: unknown }).searchApiKey;
+    stored.searchApiKeys = withSearchKeys(stored.searchApiKeys, liveSecrets());
     return stored;
   });
   const [showAnalytics, setShowAnalytics] = useState(false);
@@ -399,8 +417,72 @@ export default function App() {
         "its latest messages are lost.\n\nLeave anyway?"
     );
 
-  useEffect(() => persist("melon.agents", agents), [agents, persist, saveAttempt]);
-  useEffect(() => persist("melon.settings", settings), [settings, persist, saveAttempt]);
+  /**
+   * Whether API keys are locked with a passphrase. The encrypted record is
+   * the stored preference: main.tsx finds it on every start and asks for the
+   * passphrase before App exists, so this is true from the first render.
+   */
+  const [keyLock, setKeyLock] = useState(vaultOpen);
+  useEffect(
+    () => persist("melon.agents", keyLock ? withoutAgentKeys(agents) : agents),
+    [agents, keyLock, persist, saveAttempt]
+  );
+  useEffect(
+    () => persist("melon.settings", keyLock ? { ...settings, searchApiKeys: {} } : settings),
+    [settings, keyLock, persist, saveAttempt]
+  );
+  /**
+   * Locked keys are re-encrypted whenever one changes. Seals run in order,
+   * so an older one can never land after a newer one, and an unchanged set
+   * of keys — most settings changes — is not sealed again.
+   */
+  const sealQueue = useRef<Promise<void>>(Promise.resolve());
+  const lastSealed = useRef<string | null>(null);
+  useEffect(() => {
+    if (!keyLock) return;
+    const secrets = secretsOf(agents, settings.searchApiKeys);
+    const json = JSON.stringify(secrets);
+    if (json === lastSealed.current) return;
+    lastSealed.current = json;
+    sealQueue.current = sealQueue.current.then(async () => {
+      try {
+        persist(VAULT_KEY, await seal(secrets));
+      } catch {
+        setUnsaved((prev) => withKey(prev, VAULT_KEY, true));
+      }
+    });
+  }, [agents, settings.searchApiKeys, keyLock, persist, saveAttempt]);
+
+  /**
+   * Turns the lock on, or changes its passphrase. The new record is written
+   * before anything else changes, and the new passphrase is adopted only once
+   * it is, so a failed save leaves things exactly as they were.
+   */
+  const setPassphrase = async (passphrase: string) => {
+    const next = await newSession(passphrase);
+    const secrets = secretsOf(agents, settings.searchApiKeys);
+    const record = await seal(secrets, next);
+    if (!trySave(VAULT_KEY, JSON.stringify(record))) throw new Error("The lock could not be saved.");
+    adoptSession(next);
+    lastSealed.current = JSON.stringify(secrets);
+    setKeyLock(true);
+  };
+
+  /** Writes the keys back in plain text first, and removes the record only once they are safe. */
+  const removeLock = () => {
+    if (!trySave("melon.agents", JSON.stringify(agents)) || !trySave("melon.settings", JSON.stringify(settings))) {
+      throw new Error("The keys could not be saved.");
+    }
+    localStorage.removeItem(VAULT_KEY);
+    endSession();
+    lastSealed.current = null;
+    setKeyLock(false);
+  };
+
+  /** Reloading drops the keys from memory; the unlock screen is what comes back. */
+  const lockNow = () => {
+    void sealQueue.current.then(() => window.location.reload());
+  };
   useEffect(
     () => persist("melon.groupPersonalities", groupPersonalities),
     [groupPersonalities, persist, saveAttempt]
@@ -1155,6 +1237,10 @@ export default function App() {
           onTheme={setTheme}
           onClose={() => setShowSettings(false)}
           hasPipeline={new Set(agents.map((a) => a.team ?? 1)).size > 1}
+          keyLock={keyLock}
+          onSetPassphrase={setPassphrase}
+          onRemoveLock={removeLock}
+          onLockNow={lockNow}
         />
       )}
       {showAnalytics && <Analytics onClose={() => setShowAnalytics(false)} />}

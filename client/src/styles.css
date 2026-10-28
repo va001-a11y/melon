@@ -3021,3 +3021,47 @@ body {
   color: var(--danger);
   border-color: var(--danger);
 }
+
+/* ---------- Passphrase lock ----------
+ * The unlock screen borrows the crash screen's frame: both render before the
+ * rest of Melon, so both lean only on the palette tokens.
+ */
+.unlock-panel {
+  width: 100%;
+  max-width: 440px;
+}
+
+.unlock-input,
+.key-lock-form input {
+  width: 100%;
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.unlock-input:focus,
+.key-lock-form input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.unlock-problem {
+  color: var(--danger) !important;
+  margin: 10px 0 0 !important;
+}
+
+.key-lock-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.key-lock-form .key-lock-problem {
+  color: var(--danger);
+  font-size: 12px;
+}
