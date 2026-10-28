@@ -116,6 +116,7 @@ Presets export as plain **`.json`** (`melon-preset-YYYY-MM-DD.json`), deliberate
 - **Support button** — an ☕ link in the top bar.
 - **Chats panel** — pinned at the top of the sidebar, well separated from Agents at the bottom so a stray click can't hit the wrong one. Conversations save automatically; double-click or right-click to rename (your title is never overwritten), and opening a chat moves it to the top of the list.
 - **Hide the sidebar** — the ☰ button at the top left hides it so the chat gets the full width, and Melon remembers that you hid it. On a phone the same button opens it as a drawer instead.
+- **Reply width** — *Settings → Conversation* sets how wide reply cards are: *Standard* fits as many side by side as the screen allows, *Wide* gives each more room, *Full width* puts one per row. Melon remembers the choice. Phones always show one per row.
 - **Calm interface** — warm off-white paper with muted sage and clay accents, following your system light/dark preference. Nothing pure-white or pure-black, so long sessions stay easy on the eyes.
 - **Agent editing in place** — right-click any agent → *Edit properties* opens the form pre-filled; change anything and save without deleting the agent.
 - **Group presets** (Phase 2) — save the current activation state (which agents are on, which are focused) as a named preset and re-apply it in one click.

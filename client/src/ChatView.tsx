@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { AgentResponse, Attachment, Message } from "./types";
+import type { AgentResponse, Attachment, Message, ReplyWidth } from "./types";
 
 import { splitCot } from "./cot";
 import { hasCheckableClaim } from "./claims";
@@ -31,6 +31,7 @@ interface Props {
   canConsensus: boolean;
   onStop: () => void;
   parallel: boolean;
+  replyWidth: ReplyWidth;
   /** Only "rounds" mode labels its passes; the others stay seamless. */
   discussionMode: "single" | "until-agreed" | "rounds";
   contextFull: boolean;
@@ -587,6 +588,7 @@ export function ChatView({
   canConsensus,
   onStop,
   parallel,
+  replyWidth,
   discussionMode,
   contextFull,
   concluded,
@@ -828,7 +830,7 @@ export function ChatView({
                   <span>Round {m.round + 1}</span>
                 </div>
               )}
-              <div className={parallel ? "run-grid" : "run-relay"}>
+              <div className={`${parallel ? "run-grid" : "run-relay"} width-${replyWidth}`}>
                 {m.agentOrder.map((id, i) => {
                   const r = m.responses[id];
                   if (!r) return null;

@@ -1660,10 +1660,33 @@ body {
   font-weight: 500;
 }
 
+/*
+ * auto-fit, not auto-fill. auto-fill keeps every column that could fit,
+ * empty or not, so on a wide screen one reply got a fifth of the row and
+ * sat dwarfed beside the question it answered. auto-fit collapses the empty
+ * columns and lets the replies there are share the row.
+ */
 .run-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 12px;
+}
+
+/* Settings → Reply width. min() keeps a wide column from overflowing a narrow screen. */
+.run-grid.width-wide {
+  grid-template-columns: repeat(auto-fit, minmax(min(560px, 100%), 1fr));
+}
+
+.run-grid.width-full {
+  grid-template-columns: 1fr;
+}
+
+.run-relay.width-wide {
+  max-width: 1100px;
+}
+
+.run-relay.width-full {
+  max-width: none;
 }
 
 /* Relay mode: replies stack in speaking order so it reads as a discussion. */
@@ -2365,7 +2388,7 @@ body {
   }
 
   .run-grid {
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   }
 
   .bundle-grid {

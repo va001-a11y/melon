@@ -304,6 +304,27 @@ export function Settings({
             />
           </label>
 
+          <label className="settings-row">
+            <span>
+              Reply width
+              <small>
+                {settings.replyWidth === "full"
+                  ? "One reply per row, using the whole width"
+                  : settings.replyWidth === "wide"
+                    ? "Fewer replies side by side, each with more room"
+                    : "As many replies side by side as fit"}
+              </small>
+            </span>
+            <select
+              value={settings.replyWidth}
+              onChange={(e) => patch({ replyWidth: e.target.value as SettingsType["replyWidth"] })}
+            >
+              <option value="standard">Standard</option>
+              <option value="wide">Wide</option>
+              <option value="full">Full width</option>
+            </select>
+          </label>
+
           <label className="settings-row checkbox-row">
             <span>
               Format replies

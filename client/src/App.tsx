@@ -1210,6 +1210,7 @@ export default function App() {
           canConsensus={messages.some((m) => m.kind === "run")}
           onStop={handleStop}
           parallel={settings.parallel}
+          replyWidth={settings.replyWidth === "wide" || settings.replyWidth === "full" ? settings.replyWidth : "standard"}
           discussionMode={settings.discussionMode}
           contextFull={contextLimit > 0 && Math.ceil(historyChars / 4) >= contextLimit}
           concluded={concluded}
