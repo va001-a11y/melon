@@ -55,7 +55,7 @@ Change the **left-hand** number only — `"127.0.0.1:9000:8080"` in `docker-comp
 
 **Then leave that number alone.** Browser storage is tied to the origin, and the origin includes the port, so changing it later makes every saved chat, agent and API key appear to have been deleted. They have not been — they are still under the old address — but there is no way to move them across.
 
-By default Melon listens on `127.0.0.1`, so only this machine can reach it. To use it from your phone or another computer, drop that prefix in `docker-compose.yml` so the line reads `"8080:8080"`. Think before you do: anyone who can reach that address can use your Melon **and** make it fetch addresses on your network on their behalf — your router's admin page, other services on the LAN. Expose it only on a network where you trust everyone, and see *Melon's local server* under Security below.
+By default Melon listens on `127.0.0.1`, so only this machine can reach it. To use it from your phone or another computer, drop that prefix in `docker-compose.yml` so the line reads `"8080:8080"`. Think before you do: anyone who can reach that address can use your Melon **and** make it fetch addresses on your network on their behalf — your router's admin page, other services on the LAN. Expose it only on a network where you trust everyone. To reach it from anywhere else, see *Using Melon from your phone or another computer* under Security below: use a VPN or a proxy with a login, never an open port.
 
 **Using Ollama from the container.** Ollama runs on your machine, not inside the container, so `localhost` from in there means the container itself. The compose file already points Melon at the host:
 
@@ -234,6 +234,27 @@ That is a prompt instruction, not a sandbox, so treat it as a speed bump rather 
 - **A malformed request no longer stops it.** One bad request used to end the whole process.
 
 **Do not share one Melon between people.** It is built for one person. Anyone who can reach an exposed instance can use every key stored in *their own* browser through it, can reset the spending guard that everyone else is relying on, and can make it fetch addresses on the network it runs in. If several people want Melon, each should run their own.
+
+**Using Melon from your phone or another computer.** Melon has no login. It does not need one on the machine it runs on, which is why it listens only there by default. Once other devices can reach it, so can anyone else on that network, and none of them needs a password to:
+
+- **use your local models**, running them on your hardware through Melon's connection to Ollama;
+- **stop your replies** — Stop halts every reply the server is running, not only the visitor's, and a stopped reply cannot be resumed, even one you paid for;
+- **reset your spending guard**, and spend against the same budget;
+- **see or wipe your usage stats**, which show which models you use and how often;
+- **probe your network**, by pointing an agent at your router's admin page or other devices.
+
+Your keys and chats are not on that list. They live in each browser, not on the server, so a visitor gets an empty Melon of their own.
+
+There is one more thing a login would not fix. Your API key travels to Melon's server with each message, so at a plain `http://192.168.x.x` address it crosses the network unencrypted. On your own home wifi, that is fine. On shared wifi — a café, a university, an office — it is not.
+
+So:
+
+- **On a home network where you trust every device**, publishing the port (`"8080:8080"`, see *Run it with Docker*) is fine as it is.
+- **To reach Melon from anywhere else, use a VPN, not an open port.** [Tailscale](https://tailscale.com) is the easiest: your devices join a private network, everything between them is encrypted, and nobody else can reach Melon at all. Publish the port on the machine's Tailscale address only, e.g. `"100.101.102.103:8080:8080"`, and open that address on your phone. To use the machine's Tailscale name instead (`melon-box.your-tailnet.ts.net`), add that name to `MELON_ALLOWED_HOSTS`.
+- **If it must be on the internet**, put it behind a reverse proxy that adds both HTTPS and a login — Caddy or nginx with basic auth, or Authelia, Authentik or similar — and add the proxy's hostname to `MELON_ALLOWED_HOSTS`.
+- **Never forward Melon's port on your router.** That gives everything above to the whole internet, unencrypted.
+
+Each address is its own origin to the browser, so Melon at `localhost`, at an IP and at a Tailscale name keeps three separate sets of keys and chats. Pick one address per device and stay with it.
 
 **Where your keys actually live, and who could reach them.** Browser storage is scoped to the *origin* serving the page, and Melon does not own its origin in either build.
 
