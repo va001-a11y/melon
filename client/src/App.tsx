@@ -319,6 +319,9 @@ export default function App() {
       stored.searchApiKeys[stored.searchProvider] = legacy;
     }
     delete (stored as { searchApiKey?: unknown }).searchApiKey;
+    // The three named widths that came before dragging; never released.
+    delete (stored as { replyWidth?: unknown }).replyWidth;
+    if (typeof stored.replyCardWidth !== "number" || !(stored.replyCardWidth >= 0)) stored.replyCardWidth = 0;
     stored.searchApiKeys = withSearchKeys(stored.searchApiKeys, liveSecrets());
     return stored;
   });
@@ -1210,7 +1213,8 @@ export default function App() {
           canConsensus={messages.some((m) => m.kind === "run")}
           onStop={handleStop}
           parallel={settings.parallel}
-          replyWidth={settings.replyWidth === "wide" || settings.replyWidth === "full" ? settings.replyWidth : "standard"}
+          replyCardWidth={settings.replyCardWidth > 0 ? settings.replyCardWidth : 0}
+          onReplyCardWidth={(px) => setSettings((s) => ({ ...s, replyCardWidth: px }))}
           discussionMode={settings.discussionMode}
           contextFull={contextLimit > 0 && Math.ceil(historyChars / 4) >= contextLimit}
           concluded={concluded}

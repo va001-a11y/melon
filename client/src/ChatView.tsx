@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { AgentResponse, Attachment, Message, ReplyWidth } from "./types";
+import type { AgentResponse, Attachment, Message } from "./types";
 
 import { splitCot } from "./cot";
 import { hasCheckableClaim } from "./claims";
@@ -31,7 +31,9 @@ interface Props {
   canConsensus: boolean;
   onStop: () => void;
   parallel: boolean;
-  replyWidth: ReplyWidth;
+  /** Every reply card's width in pixels; 0 is automatic. */
+  replyCardWidth: number;
+  onReplyCardWidth: (px: number) => void;
   /** Only "rounds" mode labels its passes; the others stay seamless. */
   discussionMode: "single" | "until-agreed" | "rounds";
   contextFull: boolean;
@@ -206,6 +208,94 @@ function UserBubble({
   );
 }
 
+/** Narrower than this, a card's header no longer fits on one line. */
+const MIN_REPLY_WIDTH = 280;
+
+/**
+ * The grip on a reply card's right edge. Dragging it sets the width of every
+ * reply card at once, in every run of the chat, so they always match.
+ *
+ * While dragging, only one CSS variable on the chat changes: re-rendering
+ * every message on each mouse move would stutter in a long chat. The width
+ * is saved once, when the mouse is let go. A press that never moves saves
+ * nothing, so the first click of a double-click cannot fix the width.
+ */
+function ResizeGrip({ onResize }: { onResize: (width: number) => void }) {
+  const measure = (grip: HTMLElement) => {
+    const card = grip.parentElement!;
+    const block = card.closest(".run-block") ?? card.parentElement!;
+    return {
+      chat: card.closest(".messages") as HTMLElement | null,
+      width: card.getBoundingClientRect().width,
+      max: block.getBoundingClientRect().width,
+    };
+  };
+  const clamp = (w: number, max: number) => Math.round(Math.max(MIN_REPLY_WIDTH, Math.min(w, max)));
+
+  const start = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const grip = e.currentTarget;
+    const { chat, width: startWidth, max } = measure(grip);
+    if (!chat) return;
+    const startX = e.clientX;
+    let width = startWidth;
+    let moved = false;
+    try {
+      // Keeps the drag going when the pointer outruns the thin grip.
+      grip.setPointerCapture(e.pointerId);
+    } catch {
+      // A pointer the browser no longer counts as active: drag without capture.
+    }
+    document.body.classList.add("resizing-replies");
+
+    const move = (ev: PointerEvent) => {
+      if (!moved && Math.abs(ev.clientX - startX) < 3) return;
+      moved = true;
+      width = clamp(startWidth + ev.clientX - startX, max);
+      chat.classList.add("replies-sized");
+      chat.style.setProperty("--reply-width", `${width}px`);
+    };
+    const end = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      document.body.classList.remove("resizing-replies");
+      if (moved) onResize(width);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+  };
+
+  const keys = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = e.shiftKey ? 100 : 20;
+    if (e.key === "Home") {
+      e.preventDefault();
+      onResize(0);
+      return;
+    }
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const { width, max } = measure(e.currentTarget);
+    onResize(clamp(width + (e.key === "ArrowRight" ? step : -step), max));
+  };
+
+  return (
+    <div
+      className="card-resize"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Reply width. Arrow keys resize every reply, Home returns to automatic"
+      tabIndex={0}
+      title="Drag to resize every reply. Double-click for automatic"
+      onPointerDown={start}
+      onDoubleClick={() => onResize(0)}
+      onKeyDown={keys}
+    />
+  );
+}
+
 function AgentCard({
   response,
   showReasoning,
@@ -218,6 +308,7 @@ function AgentCard({
   onRerun,
   busy,
   agentNames,
+  onResize,
 }: {
   response: AgentResponse;
   readsBefore: string[];
@@ -234,6 +325,7 @@ function AgentCard({
   busy: boolean;
   /** Everyone in this run, so a reply opening with a teammate's name is caught. */
   agentNames: string[];
+  onResize: (width: number) => void;
 }) {
   const { cot, answer, reasoningInProgress } = splitCot(response.text, agentNames);
   const roleLabel = ROLES.find((r) => r.key === response.role)?.label ?? response.role;
@@ -320,6 +412,7 @@ function AgentCard({
   };
   return (
     <div className={`agent-card status-${response.status}`}>
+      <ResizeGrip onResize={onResize} />
       <div className="card-head">
         <span className="dot" style={{ background: response.color }} />
         <span className="card-name">{response.name}</span>
@@ -588,7 +681,8 @@ export function ChatView({
   canConsensus,
   onStop,
   parallel,
-  replyWidth,
+  replyCardWidth,
+  onReplyCardWidth,
   discussionMode,
   contextFull,
   concluded,
@@ -756,7 +850,12 @@ export function ChatView({
         </div>
       )}
 
-      <div className="messages" ref={scrollRef} onScroll={onScroll}>
+      <div
+        className={replyCardWidth > 0 ? "messages replies-sized" : "messages"}
+        style={replyCardWidth > 0 ? ({ "--reply-width": `${replyCardWidth}px` } as React.CSSProperties) : undefined}
+        ref={scrollRef}
+        onScroll={onScroll}
+      >
         {messages.length === 0 && (
           /*
             The centre of an empty screen should say what to do next, not
@@ -830,7 +929,7 @@ export function ChatView({
                   <span>Round {m.round + 1}</span>
                 </div>
               )}
-              <div className={`${parallel ? "run-grid" : "run-relay"} width-${replyWidth}`}>
+              <div className={parallel ? "run-grid" : "run-relay"}>
                 {m.agentOrder.map((id, i) => {
                   const r = m.responses[id];
                   if (!r) return null;
@@ -863,6 +962,7 @@ export function ChatView({
                       onRerun={(agentId, mode) => onRerun(m.id, agentId, mode)}
                       busy={running}
                       agentNames={m.agentOrder.map((x) => m.responses[x]?.name).filter(Boolean) as string[]}
+                      onResize={onReplyCardWidth}
                     />
                   );
                 })}

@@ -304,26 +304,21 @@ export function Settings({
             />
           </label>
 
-          <label className="settings-row">
+          <div className="settings-row">
             <span>
               Reply width
               <small>
-                {settings.replyWidth === "full"
-                  ? "One reply per row, using the whole width"
-                  : settings.replyWidth === "wide"
-                    ? "Fewer replies side by side, each with more room"
-                    : "As many replies side by side as fit"}
+                {settings.replyCardWidth > 0
+                  ? `${settings.replyCardWidth}px. Drag the grip on any reply's right edge to change it`
+                  : "Automatic. Drag the grip on any reply's right edge to set your own"}
               </small>
             </span>
-            <select
-              value={settings.replyWidth}
-              onChange={(e) => patch({ replyWidth: e.target.value as SettingsType["replyWidth"] })}
-            >
-              <option value="standard">Standard</option>
-              <option value="wide">Wide</option>
-              <option value="full">Full width</option>
-            </select>
-          </label>
+            {settings.replyCardWidth > 0 && (
+              <button className="small-btn" onClick={() => patch({ replyCardWidth: 0 })}>
+                Automatic
+              </button>
+            )}
+          </div>
 
           <label className="settings-row checkbox-row">
             <span>

@@ -31,8 +31,6 @@ export interface Agent {
   team?: number;
 }
 
-export type ReplyWidth = "standard" | "wide" | "full";
-
 export interface Settings {
   mode: string;
   detailedCoT: boolean;
@@ -51,8 +49,11 @@ export interface Settings {
   tokensPerMinute: number;
   /** Render Markdown as formatted text instead of showing the raw source. */
   formatReplies: boolean;
-  /** How wide reply cards are: several side by side, fewer and wider, or one per row. */
-  replyWidth: ReplyWidth;
+  /**
+   * The width of every reply card, in pixels, set by dragging a card's edge.
+   * 0 is automatic: replies share the row, each no wider than reads well.
+   */
+  replyCardWidth: number;
   /** Set per-run when tone changed mid-chat; not persisted. */
   styleChangedFrom?: string;
   /**

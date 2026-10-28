@@ -1672,21 +1672,29 @@ body {
   gap: 12px;
 }
 
-/* Settings → Reply width. min() keeps a wide column from overflowing a narrow screen. */
-.run-grid.width-wide {
-  grid-template-columns: repeat(auto-fit, minmax(min(560px, 100%), 1fr));
+/*
+ * Automatic width: replies share the row, but none grows past what reads
+ * comfortably. Without the cap, a lone reply stretched across a wide screen
+ * at some two hundred characters a line.
+ */
+.run-grid > .agent-card {
+  max-width: 780px;
 }
 
-.run-grid.width-full {
-  grid-template-columns: 1fr;
+/*
+ * A width set by dragging a card's grip (ResizeGrip). Every card takes it
+ * exactly, wrapping onto new rows; min() keeps it inside a narrower window.
+ */
+.replies-sized .run-grid {
+  grid-template-columns: repeat(auto-fill, min(var(--reply-width), 100%));
 }
 
-.run-relay.width-wide {
-  max-width: 1100px;
-}
-
-.run-relay.width-full {
+.replies-sized .run-grid > .agent-card {
   max-width: none;
+}
+
+.replies-sized .run-relay {
+  max-width: var(--reply-width);
 }
 
 /* Relay mode: replies stack in speaking order so it reads as a discussion. */
@@ -1698,11 +1706,56 @@ body {
 }
 
 .agent-card {
+  position: relative;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 12px;
   min-width: 0;
+}
+
+/* The grip that resizes every reply. A faint bar, so it can be found, that
+   firms up under the pointer or keyboard focus. */
+.card-resize {
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  right: 0;
+  width: 10px;
+  cursor: ew-resize;
+  touch-action: none;
+  border-radius: 0 12px 12px 0;
+}
+
+.card-resize::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  width: 3px;
+  height: 28px;
+  max-height: 100%;
+  transform: translateY(-50%);
+  border-radius: 2px;
+  background: var(--border);
+  transition: background 0.15s;
+}
+
+.card-resize:hover::after,
+.card-resize:focus-visible::after,
+.resizing-replies .card-resize::after {
+  background: var(--accent);
+}
+
+.card-resize:focus-visible {
+  outline: none;
+}
+
+/* While dragging, the whole page shows the resize cursor and selects no text. */
+.resizing-replies,
+.resizing-replies * {
+  cursor: ew-resize !important;
+  user-select: none;
 }
 
 .agent-card.status-error {
@@ -2398,6 +2451,23 @@ body {
 
 /* ---------- Tier 2: tablet / large phone — sidebar becomes a drawer ---------- */
 @media (max-width: 900px) {
+  /* One reply per row here, whatever width was chosen, so no grip. */
+  .replies-sized .run-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .replies-sized .run-relay {
+    max-width: none;
+  }
+
+  .run-grid > .agent-card {
+    max-width: none;
+  }
+
+  .card-resize {
+    display: none;
+  }
+
   /* A larger target for a thumb. */
   .menu-btn {
     min-width: 38px;
