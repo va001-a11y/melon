@@ -61,8 +61,86 @@ interface Session {
 }
 
 export class WrongPassphrase extends Error {
-  constructor() {
+  constructor(
+    /** Wrong guesses left before Melon starts making you wait. */
+    public readonly freeAttemptsLeft: number,
+    /** How long the next attempt must wait, in milliseconds; 0 when it need not. */
+    public readonly waitMs: number
+  ) {
     super("That passphrase does not unlock these keys.");
+  }
+}
+
+/** Refused before trying, because too many wrong passphrases came first. */
+export class TooManyAttempts extends Error {
+  constructor(public readonly waitMs: number) {
+    super("Too many wrong passphrases. Wait before trying again.");
+  }
+}
+
+/*
+ * A limit on guesses at the unlock screen.
+ *
+ * Five are free; after that each wrong passphrase makes the next attempt wait,
+ * starting at thirty seconds and doubling to a quarter of an hour. The count
+ * is stored, so reloading the page buys no extra guesses, and a correct
+ * passphrase clears it.
+ *
+ * What it protects against is someone at the keyboard guessing. It cannot
+ * protect against someone who has copied the encrypted record: they guess on
+ * their own machine, never through this screen, and could delete the count
+ * anyway, since it lives in the same storage. Against them, what counts is
+ * PBKDF2's cost per guess and the passphrase's length.
+ *
+ * It waits rather than wiping the keys after N failures. A wipe would let
+ * anyone at the computer delete someone's keys by typing badly on purpose,
+ * and would not slow the offline attacker at all.
+ */
+export const ATTEMPTS_KEY = "melon.vaultAttempts";
+export const FREE_ATTEMPTS = 5;
+const FIRST_WAIT_MS = 30_000;
+const LONGEST_WAIT_MS = 15 * 60_000;
+
+interface Attempts {
+  failures: number;
+  /** When the next attempt is allowed, as a timestamp. */
+  until: number;
+}
+
+function readAttempts(store: Storage): Attempts {
+  try {
+    const v = JSON.parse(store.getItem(ATTEMPTS_KEY) ?? "null") as Partial<Attempts> | null;
+    const failures = typeof v?.failures === "number" && v.failures > 0 ? Math.floor(v.failures) : 0;
+    const until = typeof v?.until === "number" ? v.until : 0;
+    return { failures, until };
+  } catch {
+    return { failures: 0, until: 0 };
+  }
+}
+
+/** How long until the unlock screen may try again, in milliseconds. */
+export function unlockWait(store: Storage = localStorage, now = Date.now()): number {
+  return Math.max(0, readAttempts(store).until - now);
+}
+
+function recordFailure(store: Storage, now: number): Attempts {
+  const failures = readAttempts(store).failures + 1;
+  const over = failures - FREE_ATTEMPTS;
+  const wait = over > 0 ? Math.min(FIRST_WAIT_MS * 2 ** (over - 1), LONGEST_WAIT_MS) : 0;
+  const next = { failures, until: wait ? now + wait : 0 };
+  try {
+    store.setItem(ATTEMPTS_KEY, JSON.stringify(next));
+  } catch {
+    // Storage full or blocked: the count is lost, the lock itself is not.
+  }
+  return next;
+}
+
+export function clearAttempts(store: Storage = localStorage): void {
+  try {
+    store.removeItem(ATTEMPTS_KEY);
+  } catch {
+    // Nothing reachable to clear.
   }
 }
 
@@ -155,7 +233,14 @@ export function endSession(): void {
 }
 
 /** Decrypts the record, and on success keeps the session for re-sealing. */
-export async function unlock(passphrase: string, record: VaultRecord): Promise<Secrets> {
+export async function unlock(
+  passphrase: string,
+  record: VaultRecord,
+  store: Storage = localStorage,
+  now = Date.now()
+): Promise<Secrets> {
+  const wait = unlockWait(store, now);
+  if (wait > 0) throw new TooManyAttempts(wait);
   const salt = fromBase64(record.salt);
   const key = await deriveKey(passphrase, salt, record.iterations);
   let plain: ArrayBuffer;
@@ -164,8 +249,10 @@ export async function unlock(passphrase: string, record: VaultRecord): Promise<S
   } catch {
     // AES-GCM authenticates as well as decrypts, so a wrong passphrase fails
     // here rather than producing garbage that looks like keys.
-    throw new WrongPassphrase();
+    const after = recordFailure(store, now);
+    throw new WrongPassphrase(Math.max(0, FREE_ATTEMPTS - after.failures), Math.max(0, after.until - now));
   }
+  clearAttempts(store);
   const secrets = normaliseSecrets(JSON.parse(new TextDecoder().decode(plain)));
   session = { key, salt, iterations: record.iterations };
   live = secrets;

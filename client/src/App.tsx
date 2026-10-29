@@ -28,6 +28,7 @@ import { getChatStore, preloadedChat } from "./chatStore";
 import {
   VAULT_KEY,
   adoptSession,
+  clearAttempts,
   endSession,
   liveSecrets,
   newSession,
@@ -466,6 +467,8 @@ export default function App() {
     const secrets = secretsOf(agents, settings.searchApiKeys);
     const record = await seal(secrets, next);
     if (!trySave(VAULT_KEY, JSON.stringify(record))) throw new Error("The lock could not be saved.");
+    // A new passphrase starts with a clean count.
+    clearAttempts();
     adoptSession(next);
     lastSealed.current = JSON.stringify(secrets);
     setKeyLock(true);
@@ -477,6 +480,7 @@ export default function App() {
       throw new Error("The keys could not be saved.");
     }
     localStorage.removeItem(VAULT_KEY);
+    clearAttempts();
     endSession();
     lastSealed.current = null;
     setKeyLock(false);

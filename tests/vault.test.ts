@@ -7,6 +7,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  ATTEMPTS_KEY,
+  FREE_ATTEMPTS,
+  TooManyAttempts,
   VAULT_KEY,
   WrongPassphrase,
   adoptSession,
@@ -57,14 +60,14 @@ test("the sealed record holds no key in plain text, and the right passphrase ope
   endSession();
   const record = readVault(store.asStorage());
   assert.ok(record);
-  assert.deepEqual(await unlock("correct horse battery", record), secrets);
+  assert.deepEqual(await unlock("correct horse battery", record, store.asStorage()), secrets);
   assert.deepEqual(liveSecrets(), secrets);
 });
 
 test("a wrong passphrase is refused, not decrypted into junk", async () => {
   const store = await lockedStore("correct horse battery");
   endSession();
-  await assert.rejects(unlock("correct horse battery!", readVault(store.asStorage())!), WrongPassphrase);
+  await assert.rejects(unlock("correct horse battery!", readVault(store.asStorage())!, store.asStorage()), WrongPassphrase);
   assert.equal(liveSecrets(), null, "a failed unlock left keys in memory");
 });
 
@@ -141,7 +144,7 @@ test("restoring while locked leaves the lock on: the backup's keys are sealed, n
   assert.ok(!raw.includes("sk-from-the-backup") && !raw.includes("brave-from-the-backup"), "restored keys left in plain text");
 
   endSession();
-  const unlocked = await unlock("correct horse battery", readVault(store.asStorage())!);
+  const unlocked = await unlock("correct horse battery", readVault(store.asStorage())!, store.asStorage());
   assert.deepEqual(unlocked, { agents: { b1: "sk-from-the-backup" }, search: { brave: "brave-from-the-backup" } });
 });
 
@@ -156,5 +159,60 @@ test("restoring a keyless backup while locked leaves the lock on, holding no key
   await applyBackup(describeBackup(file).backup!, store.asStorage(), new MemoryChats());
   await resealStored(store.asStorage());
   endSession();
-  assert.deepEqual(await unlock("correct horse battery", readVault(store.asStorage())!), { agents: {}, search: {} });
+  assert.deepEqual(await unlock("correct horse battery", readVault(store.asStorage())!, store.asStorage()), {
+    agents: {},
+    search: {},
+  });
+});
+
+/* ---------- the limit on guesses ---------- */
+
+const MINUTE = 60_000;
+
+test(`${FREE_ATTEMPTS} wrong passphrases are free; the next one makes the following try wait`, async () => {
+  const store = await lockedStore("correct horse battery");
+  const record = readVault(store.asStorage())!;
+  const t0 = 1_000_000_000_000;
+  for (let i = 1; i <= FREE_ATTEMPTS; i++) {
+    const err = await unlock("wrong guess", record, store.asStorage(), t0).catch((e) => e);
+    assert.ok(err instanceof WrongPassphrase, `attempt ${i}`);
+    assert.equal(err.freeAttemptsLeft, FREE_ATTEMPTS - i);
+    assert.equal(err.waitMs, 0, `attempt ${i} should not cost a wait`);
+  }
+  const sixth = await unlock("wrong guess", record, store.asStorage(), t0).catch((e) => e);
+  assert.ok(sixth instanceof WrongPassphrase);
+  assert.equal(sixth.waitMs, 30_000);
+
+  // Even the right passphrase is refused while waiting, without being tried.
+  await assert.rejects(unlock("correct horse battery", record, store.asStorage(), t0 + 29_000), TooManyAttempts);
+  // Once the wait is over it works, and the count is cleared.
+  assert.deepEqual(await unlock("correct horse battery", record, store.asStorage(), t0 + 31_000), secrets);
+  assert.equal(store.getItem(ATTEMPTS_KEY), null);
+});
+
+test("each further wrong passphrase doubles the wait, up to 15 minutes", async () => {
+  const store = await lockedStore("correct horse battery");
+  const record = readVault(store.asStorage())!;
+  let t = 2_000_000_000_000;
+  const waits: number[] = [];
+  for (let i = 0; i < FREE_ATTEMPTS + 8; i++) {
+    const err = await unlock("wrong guess", record, store.asStorage(), t).catch((e) => e);
+    assert.ok(err instanceof WrongPassphrase);
+    if (err.waitMs) waits.push(err.waitMs / 1000);
+    t += err.waitMs + 1;
+  }
+  assert.deepEqual(waits, [30, 60, 120, 240, 480, 900, 900, 900]);
+});
+
+test("the count survives a reload, because it is stored, and never travels in a backup", async () => {
+  const store = await lockedStore("correct horse battery");
+  const record = readVault(store.asStorage())!;
+  const t0 = 3_000_000_000_000;
+  for (let i = 0; i <= FREE_ATTEMPTS; i++) await unlock("wrong guess", record, store.asStorage(), t0).catch(() => undefined);
+  endSession();
+  // A fresh start reads the same storage: still waiting.
+  await assert.rejects(unlock("correct horse battery", record, store.asStorage(), t0 + MINUTE / 4), TooManyAttempts);
+
+  const backup = await collectBackup("everything", true, store.asStorage(), new MemoryChats(), secrets);
+  assert.ok(!(ATTEMPTS_KEY in backup.data));
 });

@@ -1,7 +1,7 @@
 import { sanitiseBaseUrl } from "./secrets";
 import { getChatStore } from "./chatStore";
 import type { ChatStore } from "./chatStore";
-import { VAULT_KEY, liveSecrets, withAgentKeys, withSearchKeys } from "./vault";
+import { ATTEMPTS_KEY, VAULT_KEY, liveSecrets, withAgentKeys, withSearchKeys } from "./vault";
 import type { Secrets } from "./vault";
 
 /*
@@ -60,7 +60,7 @@ export function inScope(key: string, scope: BackupScope): boolean {
    * was made, and a keyless export carrying it would not be keyless. Keys
    * travel the way they always have: in plain text, and only when asked for.
    */
-  if (key === VAULT_KEY) return false;
+  if (key === VAULT_KEY || key === ATTEMPTS_KEY) return false;
   if (scope === "everything") return true;
   if (scope === "chats") return key.startsWith(CHAT_PREFIX) || CHAT_KEYS.includes(key);
   return AGENT_KEYS.includes(key);

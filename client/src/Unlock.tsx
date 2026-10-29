@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { VAULT_KEY, WrongPassphrase, unlock, vaultSupported } from "./vault";
+import {
+  FREE_ATTEMPTS,
+  TooManyAttempts,
+  VAULT_KEY,
+  WrongPassphrase,
+  clearAttempts,
+  unlock,
+  unlockWait,
+  vaultSupported,
+} from "./vault";
 import type { VaultRecord } from "./vault";
 
 interface Props {
@@ -12,6 +21,12 @@ interface Props {
  * Shown before Melon starts whenever the passphrase lock is on. Melon itself
  * does not render until this is done, so nothing can run on missing keys.
  */
+/** "0:30", "14:05". */
+function formatWait(ms: number): string {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
 export function Unlock({ record, onDone }: Props) {
   const [passphrase, setPassphrase] = useState("");
   const [busy, setBusy] = useState(false);
@@ -19,11 +34,34 @@ export function Unlock({ record, onDone }: Props) {
   const [forgetting, setForgetting] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const supported = vaultSupported();
+  /** When the next attempt is allowed, if Melon is making you wait. */
+  const [waitUntil, setWaitUntil] = useState(() => {
+    const wait = unlockWait();
+    return wait > 0 ? Date.now() + wait : 0;
+  });
+  const [now, setNow] = useState(() => Date.now());
+  const waiting = waitUntil > now;
 
   useEffect(() => input.current?.focus(), []);
 
+  // Tick once a second while waiting, and hand the keyboard back when it ends.
+  useEffect(() => {
+    if (!waitUntil) return;
+    const timer = window.setInterval(() => {
+      const t = Date.now();
+      setNow(t);
+      if (t >= waitUntil) {
+        window.clearInterval(timer);
+        setWaitUntil(0);
+        setProblem(null);
+        window.setTimeout(() => input.current?.focus(), 0);
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [waitUntil]);
+
   const submit = async () => {
-    if (!passphrase || busy) return;
+    if (!passphrase || busy || waiting) return;
     setBusy(true);
     setProblem(null);
     try {
@@ -31,12 +69,29 @@ export function Unlock({ record, onDone }: Props) {
       onDone();
     } catch (error) {
       setBusy(false);
-      setProblem(
-        error instanceof WrongPassphrase
-          ? "That passphrase is not right. If you have restored a backup or copied Melon's data from elsewhere, it may need the passphrase that was in use there."
-          : "Melon could not read its locked keys. Your other data is fine."
-      );
       setPassphrase("");
+      if (error instanceof TooManyAttempts || (error instanceof WrongPassphrase && error.waitMs > 0)) {
+        const t = Date.now();
+        setNow(t);
+        setWaitUntil(t + error.waitMs);
+        setProblem(
+          `That is more than ${FREE_ATTEMPTS} wrong passphrases, so Melon is making you wait before the next try. ` +
+            "Each further wrong one doubles the wait, up to 15 minutes."
+        );
+        return;
+      }
+      if (error instanceof WrongPassphrase) {
+        const left = error.freeAttemptsLeft;
+        setProblem(
+          "That passphrase is not right." +
+            (left <= 2
+              ? ` ${left === 0 ? "The next wrong one" : `After ${left} more wrong ${left === 1 ? "one" : "ones"}, the next`} will make you wait before trying again.`
+              : "") +
+            " If you have restored a backup or copied Melon's data from elsewhere, it may need the passphrase that was in use there."
+        );
+      } else {
+        setProblem("Melon could not read its locked keys. Your other data is fine.");
+      }
       input.current?.focus();
     }
   };
@@ -44,6 +99,7 @@ export function Unlock({ record, onDone }: Props) {
   const forget = () => {
     try {
       localStorage.removeItem(VAULT_KEY);
+      clearAttempts();
     } catch {
       // Storage blocked: there is nothing to remove that this page can reach.
     }
@@ -71,7 +127,7 @@ export function Unlock({ record, onDone }: Props) {
               aria-label="Passphrase"
               placeholder="Passphrase"
               value={passphrase}
-              disabled={busy}
+              disabled={busy || waiting}
               onChange={(e) => setPassphrase(e.target.value)}
             />
             {problem && (
@@ -80,8 +136,8 @@ export function Unlock({ record, onDone }: Props) {
               </p>
             )}
             <div className="crash-actions">
-              <button className="primary-btn" type="submit" disabled={!passphrase || busy}>
-                {busy ? "Unlocking…" : "Unlock"}
+              <button className="primary-btn" type="submit" disabled={!passphrase || busy || waiting}>
+                {busy ? "Unlocking…" : waiting ? `Try again in ${formatWait(waitUntil - now)}` : "Unlock"}
               </button>
             </div>
           </>
