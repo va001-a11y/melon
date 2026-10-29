@@ -285,7 +285,7 @@ export interface PriorTurn {
    * social-media post, or that they are citing different outlets, and to say
    * so instead of flatly disagreeing.
    */
-  citations?: { url: string; title?: string }[];
+  citations?: { url: string; title?: string; n?: number }[];
 }
 
 /**
@@ -353,6 +353,42 @@ export function normaliseCitationMarkers(text: string): string {
     .replace(/ +([.,;:!?])/g, "$1");
 }
 
+/**
+ * End a reply where the model starts writing another agent's turn.
+ *
+ * Earlier turns reach the model as "[Name]: …", and a model continuing that
+ * transcript can finish its own answer and carry straight on as the next
+ * speaker. Qwen did exactly that: it answered, then wrote a second answer
+ * headed "[Nemotron 3.5 Lightning]:" — the old name of a teammate — which was
+ * published under Qwen's card, fed to the teammate as Qwen's work, and kept
+ * in the history for every later question.
+ *
+ * Only the bracketed form, and only for a name that belongs to the chat.
+ * That is Melon's own transcript format, which a reply has no other reason to
+ * write at the start of a line; a bare "Claude:" can be a legitimate line in a
+ * comparison of models. A label partly streamed at the very end is hidden too,
+ * so it does not flicker into view before the rest arrives.
+ */
+export function cutAtAnotherTurn(text: string, agentNames: string[] = []): string {
+  let end = text.length;
+  const labels: string[] = [];
+  for (const name of agentNames) {
+    const trimmed = name?.trim();
+    if (!trimmed) continue;
+    labels.push(`[${trimmed}]:`.toLowerCase());
+    const turn = new RegExp(`\\n[ \\t]*\\[${escapeForRegex(trimmed)}\\][ \\t]*:`, "i");
+    const m = turn.exec(text);
+    if (m && m.index < end) end = m.index;
+  }
+  let kept = text.slice(0, end);
+  const lastBreak = kept.lastIndexOf("\n");
+  if (lastBreak >= 0) {
+    const tail = kept.slice(lastBreak + 1).trimStart().toLowerCase();
+    if (tail.startsWith("[") && labels.some((l) => l.startsWith(tail))) kept = kept.slice(0, lastBreak);
+  }
+  return kept.trimEnd();
+}
+
 export function stripSpeakerLabel(text: string, agentNames: string[] = []): string {
   // Bracketed, any name.
   const bracketed = text.replace(/^\s*\[[^\]\n]{1,60}\]:[ \t]*/, "");
@@ -362,7 +398,7 @@ export function stripSpeakerLabel(text: string, agentNames: string[] = []): stri
   for (const name of agentNames) {
     const trimmed = name?.trim();
     if (!trimmed) continue;
-    const bare = new RegExp(`^\s*${escapeForRegex(trimmed)}\s*:[ \t]*`, "i");
+    const bare = new RegExp(`^\\s*${escapeForRegex(trimmed)}\\s*:[ \\t]*`, "i");
     if (bare.test(text)) return text.replace(bare, "");
   }
 
@@ -423,7 +459,8 @@ export function buildMessages(
       content: priorThisRound
         .map((p) => {
           const sources = (p.citations ?? [])
-            .map((c, i) => `  [${i + 1}] ${c.title || c.url} — ${c.url}`)
+            // The number the teammate's prose cites, which pruning keeps.
+            .map((c, i) => `  [${c.n ?? i + 1}] ${c.title || c.url} — ${c.url}`)
             .join("\n");
           // Named as theirs, so the reader treats them as a teammate's
           // evidence to weigh rather than as their own research.

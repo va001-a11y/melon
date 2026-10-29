@@ -1229,6 +1229,66 @@ It searches only the words of questions and replies now.
 
 ---
 
+## After v0.7.2 (2026-10-29) — a renamed agent, and a relay that lost track
+
+Found by a user. A relay of Qwen 3.8 27B then GPT OSS 20B, in a chat where
+GPT OSS had earlier been called "Nemotron 3.5 Lightning". Asked about Darwin
+after a question about peptidoglycan, the run went wrong three ways at once.
+
+### A renamed agent became two agents
+
+Each reply keeps the name its agent had when it was written, and the history
+sent to the models used that name. So the models saw three speakers: Qwen,
+"Nemotron" (GPT OSS's old answers) and a newcomer called GPT OSS. History
+now uses each agent's current name, and keeps the old one only for an agent
+that no longer exists.
+
+### Qwen wrote a turn for its teammate
+
+Having seen Qwen and then Nemotron answer last time, Qwen answered and then
+carried on the pattern: a second answer headed "[Nemotron 3.5 Lightning]:".
+`stripSpeakerLabel` only looked at the start of a reply, so the turn was
+published on Qwen's card, passed to GPT OSS as Qwen's work, and kept in the
+history for every later question.
+
+A reply now ends where a line opens with "[Name]:" for any name an agent has
+had in the chat. That applies to the card, the history and what the next
+agent reads. Only the bracketed form: it is Melon's own transcript format,
+while a bare "Claude:" line can be an honest part of a comparison.
+
+**The same function, on the server, had never worked properly.** Its pattern
+was written as `\s` inside a template string, where it is just the letter s,
+so a bare label was stripped only when nothing stood before the name or the
+colon. The app's copy had it right, which is why nobody saw it.
+
+### GPT OSS answered the previous question
+
+Second in the relay, it read the whole chat and then "Now add your
+contribution, building on what your teammates said above" — and above sat
+the earlier question, with more teammates' answers than the current one, one
+of them apparently its own under a name it no longer had. It answered about
+peptidoglycan. The last thing a relay agent reads now names the question it
+is answering.
+
+This one is inferred from the prompt, not reproduced with the same models;
+the test checks the prompt says the right thing, not that a 20B model obeys.
+
+### [4] and [5] beside a list numbered 1 and 2
+
+When an answer cited only some search results, the unused ones were dropped
+and the rest renumbered, in the prose and the list alike. But the prose was
+renumbered only in the server's copy. The card shows the reply exactly as it
+streamed, so it kept [4] and [5], under a list of two numbered 1 and 2.
+Nothing is renumbered now: each kept source carries the number the reply
+cites it by, and the list shows that number.
+
+**One renamed agent produced all three.** The impersonation and the wrong
+question both follow from the history disagreeing about who is who, which is
+why the history's names were fixed first, and the other two guarded
+regardless.
+
+---
+
 ## Testing notes that cost time to learn
 
 - **A `window.fetch` recorder does not see** dynamic `import()` or Worker

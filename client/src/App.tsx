@@ -581,6 +581,18 @@ export default function App() {
    * single agent needs: it must see everything that led up to its turn, but
    * not its own previous attempt or anything that came after.
    */
+  /**
+   * Every name an agent has had in this chat, plus the line-up's. What a model
+   * writes as one of them — a label, or a whole turn — is not its own answer.
+   */
+  const speakerNames = useMemo(() => {
+    const names = new Set(agents.map((a) => a.name));
+    for (const m of messages) {
+      if (m.kind !== "user") for (const r of Object.values(m.responses)) if (r?.name) names.add(r.name);
+    }
+    return [...names];
+  }, [agents, messages]);
+
   const buildHistoryFrom = useCallback(
     (source: Message[], stopBefore?: string): HistoryTurn[] => {
       const history: HistoryTurn[] = [];
@@ -593,14 +605,22 @@ export default function App() {
         for (const agentId of m.agentOrder) {
           const r = m.responses[agentId];
           if (!r || r.status !== "done") continue;
-          const { answer, cot } = splitCot(r.text);
+          const { answer, cot } = splitCot(r.text, speakerNames);
           const content = answer || cot;
-          if (content) history.push({ role: "assistant", agentName: r.name, content });
+          /*
+           * Under the agent's current name. A reply keeps the name it had when
+           * it was written, so an agent renamed mid-chat reached the models as
+           * two different agents: its old answers under the old name, itself
+           * under the new one. Qwen then wrote a turn as the old name, and the
+           * renamed agent answered the previous question as though new to it.
+           */
+          const name = agents.find((a) => a.id === agentId)?.name ?? r.name;
+          if (content) history.push({ role: "assistant", agentName: name, content });
         }
       }
       return history;
     },
-    []
+    [agents, speakerNames]
   );
 
   const buildHistory = useCallback((): HistoryTurn[] => buildHistoryFrom(messages), [messages, buildHistoryFrom]);
@@ -769,7 +789,7 @@ export default function App() {
       if (!agent || !block || block.kind !== "run") return;
 
       const previous = block.responses[agentId];
-      const partial = mode === "continue" ? splitCot(previous?.text ?? "").answer : "";
+      const partial = mode === "continue" ? splitCot(previous?.text ?? "", speakerNames).answer : "";
 
       // The user turn this block was answering, so the agent sees the question.
       const index = messages.findIndex((m) => m.id === blockId);
@@ -851,7 +871,7 @@ export default function App() {
       setRunning(false);
       setPacing(false);
     },
-    [agents, messages, settings, burst, teamNames, teamBriefs, groupPersonalities, buildHistoryFrom, updateRun]
+    [agents, messages, settings, burst, teamNames, teamBriefs, groupPersonalities, buildHistoryFrom, updateRun, speakerNames]
   );
 
   // STOP TOKEN FLOW: terminal kill of all in-flight generation. No resume —
@@ -904,7 +924,7 @@ export default function App() {
     const answers = lastRun.agentOrder
       .map((id) => lastRun.responses[id])
       .filter((r) => r && r.status === "done")
-      .map((r) => `[${r.name}]: ${splitCot(r.text).answer || splitCot(r.text).cot}`)
+      .map((r) => `[${r.name}]: ${splitCot(r.text, speakerNames).answer || splitCot(r.text, speakerNames).cot}`)
       .join("\n\n");
     if (!answers) {
       setBanner("No completed answers in the last round to reconcile.");
@@ -916,7 +936,7 @@ export default function App() {
         "\n\nIdentify where you agree, where you disagree and why, flag any claim you believe is wrong or unverifiable, " +
         "then state your consensus verdict — the answer you think the panel should stand behind."
     );
-  }, [messages, send]);
+  }, [messages, send, speakerNames]);
 
   const newChat = useCallback(() => {
     if (runningRef.current) return;

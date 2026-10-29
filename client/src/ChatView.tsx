@@ -566,7 +566,7 @@ function AgentCard({
           </summary>
           <ol>
             {response.citations.map((c) => (
-              <li key={c.url}>
+              <li key={c.url} value={c.n}>
                 {isWebUrl(c.url) ? (
                   <a href={c.url} target="_blank" rel="noreferrer noopener" title={c.url}>
                     {c.title || hostOf(c.url)}

@@ -57,4 +57,5 @@ export {
   stripConclusion,
   stripSpeakerLabel,
 } from "./prompts.js";
+export { cutAtAnotherTurn } from "./prompts.js";
 export type { PriorTurn } from "./prompts.js";

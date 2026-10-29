@@ -1,3 +1,5 @@
+import { cutAtAnotherTurn } from "@melon/core";
+
 export const COT_START = "===REASONING===";
 export const COT_END = "===ANSWER===";
 
@@ -184,7 +186,7 @@ export function splitCot(text: string, agentNames: string[] = []): SplitResult {
 
   return {
     cot: normaliseCitationMarkers(reasonings.map((r) => r.trim()).filter(Boolean).join("\n\n")),
-    answer: stripSpeakerLabel(answer, agentNames),
+    answer: cutAtAnotherTurn(stripSpeakerLabel(answer, agentNames), agentNames),
     reasoningInProgress,
   };
 }

@@ -484,9 +484,11 @@ async function searchHttpError(res: Response, label: string, apiKey = ""): Promi
  * implies a breadth of checking that did not happen, and citations exist to
  * show what an answer rests on. An unread page is not a source.
  *
- * Renumbers as it prunes, so [5] in the prose still points at the fifth entry
- * of the list the reader is looking at. One pass through replace(), because
- * rewriting numbers one at a time would rewrite its own output.
+ * Keeps the numbers as written, and says so on each source kept: a reply
+ * citing [4] and [5] lists those two, numbered 4 and 5. It used to renumber
+ * them to [1] and [2] instead — but only in the server's copy of the answer.
+ * The card shows the text exactly as it streamed, so the reader saw [4] and
+ * [5] beside a list numbered 1 and 2, citing sources that did not exist.
  *
  * Returns everything unchanged when the answer cites nothing — many models
  * never write a marker, and showing no sources at all would be worse than
@@ -495,7 +497,7 @@ async function searchHttpError(res: Response, label: string, apiKey = ""): Promi
 export function pruneUnusedSources(
   answer: string,
   citations: { url: string; title?: string }[]
-): { answer: string; citations: { url: string; title?: string }[] } {
+): { answer: string; citations: { url: string; title?: string; n?: number }[] } {
   if (citations.length === 0) return { answer, citations };
 
   const cited = new Set<number>();
@@ -506,14 +508,7 @@ export function pruneUnusedSources(
   if (cited.size === 0) return { answer, citations };
 
   const keep = [...cited].sort((a, b) => a - b);
-  const renumber = new Map(keep.map((old, i) => [old, i + 1]));
-  return {
-    answer: answer.replace(/\[(\d+)\]/g, (whole, digits) => {
-      const next = renumber.get(Number(digits));
-      return next ? `[${next}]` : whole;
-    }),
-    citations: keep.map((n) => citations[n - 1]),
-  };
+  return { answer, citations: keep.map((n) => ({ ...citations[n - 1], n })) };
 }
 
 /**

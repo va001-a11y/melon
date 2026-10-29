@@ -15,6 +15,7 @@ import {
   normaliseCitationMarkers,
   stripConclusion,
   stripSpeakerLabel,
+  cutAtAnotherTurn,
 } from "./prompts.js";
 import type { PriorTurn } from "./prompts.js";
 import { stopController } from "./stop.js";
@@ -110,6 +111,25 @@ function continuationPrompt(history: HistoryTurn[], priorThisRound: PriorTurn[],
     `raised since your last turn — agree with a reason, push back with a reason, or ask a question. ` +
     `Do not summarise the discussion so far, and do not repeat what you already said. ` +
     `If the discussion has genuinely finished, say so in one sentence.`
+  );
+}
+
+/**
+ * What closes a relay agent's first-round prompt, once teammates have spoken.
+ *
+ * It used to say only "add your contribution, building on what your
+ * teammates said above" — and above sat the whole chat, earlier questions and
+ * their answers included. GPT OSS 20B, second in a relay, answered the
+ * previous question instead of the current one. The last thing a model reads
+ * weighs most, so it now names the question being answered.
+ */
+function relayPrompt(question: string): string {
+  const q = question.trim().replace(/\s+/g, " ");
+  const quoted = q.length > 600 ? `${q.slice(0, 600)}…` : q;
+  return (
+    `Your teammates' answers to the latest question are above. Add your own contribution to that same question` +
+    `${quoted ? ` — "${quoted}" —` : ""} building on what they said. ` +
+    `Answer the latest question, not an earlier one in the conversation.`
   );
 }
 
@@ -372,6 +392,14 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
     return sharedSearch;
   };
 
+  /** Everyone who has spoken in this chat or is speaking now, by any name the history used. */
+  const speakerNames = [
+    ...new Set([
+      ...req.agents.map((a) => a.name),
+      ...req.history.flatMap((t) => (t.role === "assistant" && t.agentName ? [t.agentName] : [])),
+    ]),
+  ];
+
   const runAgent = async (agent: AgentSpec, round: number, priorThisRound: PriorTurn[]): Promise<void> => {
     sink.send("agent-start", { agentId: agent.id, round });
     analytics.recordStart(agent.provider, agent.model);
@@ -494,7 +522,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
           parallel && !isPipeline ? [] : priorThisRound,
           round === 0 ? req.attachments ?? [] : [],
           round === 0
-            ? handoffPrompt(agent, req, priorThisRound)
+            ? handoffPrompt(agent, req, priorThisRound) ?? relayPrompt(req.userMessage)
             : continuationPrompt(runningHistory, priorThisRound, agent.name),
           searchContext
         ),
@@ -544,7 +572,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
       // would re-label it next turn as "[Name]: [Name]: …" — and a teammate's
       // name would enter the history as though they had actually said it.
       let answer = normaliseCitationMarkers(
-        stripSpeakerLabel(stripConclusion(raw), req.agents.map((a) => a.name))
+        cutAtAnotherTurn(stripSpeakerLabel(stripConclusion(raw), speakerNames), speakerNames)
       ).trim();
 
       /*

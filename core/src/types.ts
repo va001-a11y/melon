@@ -143,6 +143,12 @@ export type FinishReason = "stop" | "length" | "filtered" | "unknown";
 export interface Citation {
   url: string;
   title?: string;
+  /**
+   * The number the answer cites this source by, when that is not simply its
+   * place in the list — Melon's own search keeps a reply's [4] and [5] as
+   * written and lists those two, numbered 4 and 5.
+   */
+  n?: number;
 }
 
 export interface ProviderResult {
