@@ -86,6 +86,43 @@ export interface RunSink {
 }
 
 /**
+ * How long a provider may send nothing at all before Melon stops waiting.
+ *
+ * There was no limit. A provider that accepted the request and then never
+ * answered left the card on "starting…" for as long as the tab stayed open,
+ * and in a relay every agent after it waited too, so the run never ended.
+ *
+ * Measured from the last thing the provider sent, of any kind: keep-alive
+ * comments count, so a model queued at a busy provider, or reasoning out of
+ * sight, is not cut off while the connection is visibly alive. Generous,
+ * because a hidden-reasoning model can be quiet for minutes. Local models
+ * get longer still: a large one loading on a CPU says nothing until it has.
+ *
+ * An object rather than constants so the tests can shorten it.
+ */
+export const STALL_LIMITS = { hostedMs: 3 * 60_000, localMs: 10 * 60_000 };
+
+/** A model on this machine or this network, which may legitimately take minutes to load. */
+function isLocalTarget(providerGroup: string | undefined, baseUrl: string | undefined): boolean {
+  if (providerGroup === "Local") return true;
+  let host = "";
+  try {
+    host = new URL(baseUrl ?? "").hostname.replace(/^\[|\]$/g, "");
+  } catch {
+    return false;
+  }
+  return (
+    host === "localhost" ||
+    host.endsWith(".local") ||
+    host === "::1" ||
+    /^127\./.test(host) ||
+    /^10\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+  );
+}
+
+/**
  * What an agent is asked on its second and later turns. Naming who spoke
  * most recently gives it something concrete to reply to, which is what makes
  * the exchange read as a conversation rather than parallel monologues.
@@ -504,53 +541,96 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
         }
       }
 
-      const result = await target.adapter.chat({
-        model: agent.model,
-        apiKey: agent.apiKey,
-        baseUrl: target.baseUrl,
-        providerLabel: target.label,
-        providerId: agent.provider,
-        webSearch: agent.webSearch === true,
-        detailedCoT: req.settings.detailedCoT === true,
-        system: buildSystemPrompt(agent, req.settings, teamNames),
-        messages: buildMessages(
-          runningHistory,
-          round === 0 ? req.userMessage : continuationPrompt(runningHistory, [], agent.name),
-          // A later team must always receive the earlier teams' output, even
-          // when agents within a team answer simultaneously — that hand-off
-          // is the whole point of a pipeline.
-          parallel && !isPipeline ? [] : priorThisRound,
-          round === 0 ? req.attachments ?? [] : [],
-          round === 0
-            ? handoffPrompt(agent, req, priorThisRound) ?? relayPrompt(req.userMessage)
-            : continuationPrompt(runningHistory, priorThisRound, agent.name),
-          searchContext
-        ),
-        maxOutputTokens: req.settings.maxOutputTokens,
-        signal: controller.signal,
-        handlers: {
-          onToken: async (text) => {
-            if (!firstTokenSeen) {
-              firstTokenSeen = true;
-              analytics.recordFirstToken(agent.provider, agent.model, Date.now() - startedAt);
-            }
-            streamedChars += text.length;
-            tokenGuard.addInflightChars(text.length);
-            sink.send("token", { agentId: agent.id, text, round });
-            // Slow the stream to the user's chosen pace.
-            await paceChunk(text.length);
-            if (tokenGuard.exhausted() && !controller.signal.aborted) {
-              analytics.recordBudgetAbort();
-              stopReason = "budget";
-              sink.send("budget-stop", {
-                budget: tokenGuard.getBudget(),
-                usedOutputTokens: tokenGuard.usedOutputTokens(),
-              });
-              controller.abort(new Error("token budget exhausted"));
-            }
+      /*
+       * This agent's own stop signal: the run's, plus the stall watchdog.
+       * Only this agent fails when its provider goes silent; the run, and in
+       * a relay the agents after it, carry on.
+       */
+      const idleMs = isLocalTarget(getProvider(agent.provider)?.group, target.baseUrl)
+        ? STALL_LIMITS.localMs
+        : STALL_LIMITS.hostedMs;
+      const agentController = new AbortController();
+      const forwardStop = () => agentController.abort(controller.signal.reason);
+      if (controller.signal.aborted) forwardStop();
+      else controller.signal.addEventListener("abort", forwardStop, { once: true });
+      let stalled = false;
+      let stallTimer: ReturnType<typeof setTimeout> | undefined;
+      const poke = () => {
+        clearTimeout(stallTimer);
+        stallTimer = setTimeout(() => {
+          stalled = true;
+          agentController.abort(new Error("The provider went silent."));
+        }, idleMs);
+      };
+      poke();
+
+      let result: Awaited<ReturnType<typeof target.adapter.chat>>;
+      try {
+        result = await target.adapter.chat({
+          model: agent.model,
+          apiKey: agent.apiKey,
+          baseUrl: target.baseUrl,
+          providerLabel: target.label,
+          providerId: agent.provider,
+          webSearch: agent.webSearch === true,
+          detailedCoT: req.settings.detailedCoT === true,
+          system: buildSystemPrompt(agent, req.settings, teamNames),
+          messages: buildMessages(
+            runningHistory,
+            round === 0 ? req.userMessage : continuationPrompt(runningHistory, [], agent.name),
+            // A later team must always receive the earlier teams' output, even
+            // when agents within a team answer simultaneously — that hand-off
+            // is the whole point of a pipeline.
+            parallel && !isPipeline ? [] : priorThisRound,
+            round === 0 ? req.attachments ?? [] : [],
+            round === 0
+              ? handoffPrompt(agent, req, priorThisRound) ?? relayPrompt(req.userMessage)
+              : continuationPrompt(runningHistory, priorThisRound, agent.name),
+            searchContext
+          ),
+          maxOutputTokens: req.settings.maxOutputTokens,
+          signal: agentController.signal,
+          handlers: {
+            onActivity: poke,
+            onToken: async (text) => {
+              poke();
+              if (!firstTokenSeen) {
+                firstTokenSeen = true;
+                analytics.recordFirstToken(agent.provider, agent.model, Date.now() - startedAt);
+              }
+              streamedChars += text.length;
+              tokenGuard.addInflightChars(text.length);
+              sink.send("token", { agentId: agent.id, text, round });
+              // Slow the stream to the user's chosen pace. Melon's own wait,
+              // so it must not count against the provider.
+              await paceChunk(text.length);
+              poke();
+              if (tokenGuard.exhausted() && !controller.signal.aborted) {
+                analytics.recordBudgetAbort();
+                stopReason = "budget";
+                sink.send("budget-stop", {
+                  budget: tokenGuard.getBudget(),
+                  usedOutputTokens: tokenGuard.usedOutputTokens(),
+                });
+                controller.abort(new Error("token budget exhausted"));
+              }
+            },
           },
-        },
-      });
+        });
+      } catch (err) {
+        if (stalled && !controller.signal.aborted) {
+          const minutes = Math.round(idleMs / 60_000);
+          throw new Error(
+            `${target.label} sent nothing for ${minutes} minute${minutes === 1 ? "" : "s"}, so Melon stopped waiting ` +
+              `for this reply. The provider is probably overloaded, or the request is stuck on its side. ` +
+              `Try again, or switch this agent to another model.`
+          );
+        }
+        throw err;
+      } finally {
+        clearTimeout(stallTimer);
+        controller.signal.removeEventListener("abort", forwardStop);
+      }
       tokenGuard.settleInflight(streamedChars);
       const usage =
         result.usage.outputTokens > 0

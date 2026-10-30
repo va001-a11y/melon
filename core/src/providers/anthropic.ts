@@ -72,7 +72,7 @@ export const anthropic: ProviderAdapter = {
     let outputTokens = 0;
     let finishReason: FinishReason | undefined;
     const sources = new CitationCollector();
-    for await (const data of readStreamLines(res.body!, "sse")) {
+    for await (const data of readStreamLines(res.body!, "sse", handlers.onActivity)) {
       if (data === "[DONE]") break;
       let event: any;
       try {

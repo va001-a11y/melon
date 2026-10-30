@@ -1287,6 +1287,26 @@ question both follow from the history disagreeing about who is who, which is
 why the history's names were fixed first, and the other two guarded
 regardless.
 
+### A provider that never answered held the run forever (2026-10-30)
+
+Found by the same user, in a fresh chat: GPT OSS 20B, second in a relay, sat
+on "starting…" past two and a half minutes and never moved. Melon had no
+limit on how long it would wait for a provider, at any stage, so a request
+the provider accepted and then ignored was waited on for as long as the tab
+stayed open. In a relay, every agent after it waited too.
+
+Each agent now has a watchdog: if its provider sends nothing at all for
+three minutes, that agent fails with a message saying so, and the run moves
+on. Anything the provider sends resets it, keep-alive comments included, so
+a model queued at a busy provider or reasoning out of sight is not cut off
+while the connection is visibly alive. Local models get ten minutes, since a
+large one loading on a CPU says nothing until it has.
+
+**Every network wait needs an end.** The card's own tooltip already said "a
+long wait here is usually the provider" — true, and no help when the wait
+has no end. It also covers the request itself, not only the stream: a
+provider that never sends its first byte is the case that went unnoticed.
+
 ---
 
 ## Testing notes that cost time to learn

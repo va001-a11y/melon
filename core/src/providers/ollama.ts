@@ -249,7 +249,7 @@ export const ollama: ProviderAdapter = {
       text += close;
       await handlers.onToken(close);
     };
-    for await (const line of readStreamLines(res.body!, "ndjson")) {
+    for await (const line of readStreamLines(res.body!, "ndjson", handlers.onActivity)) {
       let event: any;
       try {
         event = JSON.parse(line);

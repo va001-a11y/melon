@@ -45,7 +45,7 @@ export const google: ProviderAdapter = {
     let outputTokens = 0;
     let finishReason: FinishReason | undefined;
     const sources = new CitationCollector();
-    for await (const data of readStreamLines(res.body!, "sse")) {
+    for await (const data of readStreamLines(res.body!, "sse", handlers.onActivity)) {
       let event: any;
       try {
         event = JSON.parse(data);

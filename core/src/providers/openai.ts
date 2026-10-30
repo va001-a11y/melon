@@ -226,7 +226,7 @@ export const openai: ProviderAdapter = {
       await emit(ready);
     };
 
-    for await (const data of readStreamLines(res.body!, "sse")) {
+    for await (const data of readStreamLines(res.body!, "sse", handlers.onActivity)) {
       if (data === "[DONE]") break;
       let event: any;
       try {

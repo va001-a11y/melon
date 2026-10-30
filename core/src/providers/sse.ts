@@ -5,7 +5,9 @@
  */
 export async function* readStreamLines(
   body: ReadableStream<Uint8Array>,
-  mode: "sse" | "ndjson"
+  mode: "sse" | "ndjson",
+  /** Called on every chunk read, keep-alive comments included. */
+  onActivity?: () => void
 ): AsyncGenerator<string> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -14,6 +16,7 @@ export async function* readStreamLines(
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      onActivity?.();
       buffer += decoder.decode(value, { stream: true });
       let newlineIdx: number;
       while ((newlineIdx = buffer.indexOf("\n")) >= 0) {

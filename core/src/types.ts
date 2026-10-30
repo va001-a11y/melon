@@ -123,6 +123,12 @@ export interface ProviderStreamHandlers {
    * backpressure — that is how the token-pace limit slows visible output.
    */
   onToken: (text: string) => void | Promise<void>;
+  /**
+   * Anything at all arrived from the provider: a token, a reasoning chunk, or
+   * a keep-alive that carries no text. Lets the orchestrator tell a provider
+   * that is working quietly from one that has gone silent.
+   */
+  onActivity?: () => void;
 }
 
 /**
