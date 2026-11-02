@@ -29,10 +29,23 @@ import {
   pruneUnusedSources,
   runWebSearch,
   searchQueryFor,
+  MAX_PLANNED_HITS,
+  trimQuery,
   worthSearching,
 } from "./search.js";
 import { ollamaMaxContext } from "./providers/ollama.js";
+import { outputLimitFrom } from "./providers/sse.js";
+import {
+  PLANNER_SYSTEM,
+  interleaveHits,
+  keyTerms,
+  missingTerms,
+  parsePlannedQueries,
+  plannerPrompt,
+  splitListQuery,
+} from "./searchPlan.js";
 import type { Citation } from "./types.js";
+import type { SearchHit } from "./search.js";
 import { computeDynamicLimit, estimateTokens, tokenGuard } from "./guard.js";
 import { analytics } from "./analytics.js";
 
@@ -414,19 +427,107 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
    * once per agent would spend more quota to fail the same way.
    */
   let sharedSearch: Promise<{ context: string; citations: Citation[] }> | null = null;
-  const searchOnce = (engineId: string, apiKey: string) => {
-    if (!sharedSearch) {
-      const query = searchQueryFor(req.history, req.userMessage);
-      sharedSearch = runWebSearch({ provider: engineId, apiKey, query, signal: controller.signal })
-        // Read the top results in full when asked. Shared like the search, so
-        // a relay of five agents reads each page once, not five times.
-        .then((hits) => (req.settings.readFullPages ? readFullPages(hits, controller.signal) : hits))
-        .then((hits) => ({
-          context: formatSearchContext(query, hits),
-          citations: hits.map((h) => ({ url: h.url, title: h.title || undefined })),
-        }));
-    }
+  const searchOnce = (engineId: string, apiKey: string, planner: AgentSpec) => {
+    if (!sharedSearch) sharedSearch = plannedSearch(engineId, apiKey, planner);
     return sharedSearch;
+  };
+
+  /** Several searches at once. Fails only if every one of them does, with the first failure. */
+  const searchAll = async (engineId: string, apiKey: string, queries: string[]) => {
+    const settled = await Promise.allSettled(
+      queries.map((query) =>
+        runWebSearch({
+          provider: engineId,
+          apiKey,
+          query,
+          signal: controller.signal,
+          // One search keeps its five; several share the larger total.
+          maxResults: queries.length === 1 ? 5 : 3,
+        })
+      )
+    );
+    const lists = settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+    if (lists.length === 0) throw (settled[0] as PromiseRejectedResult).reason;
+    return lists;
+  };
+
+  /**
+   * What to search for, cheapest first — see searchPlan.ts. A list in the
+   * question is split for free; otherwise the question is searched as it
+   * always was. Only when a name the question asks about appears nowhere in
+   * the results is a model asked for better queries, because that call is
+   * the user's time and money.
+   */
+  const plannedSearch = async (engineId: string, apiKey: string, planner: AgentSpec) => {
+    const listed = splitListQuery(req.userMessage);
+    const queries = listed.length ? listed : [searchQueryFor(req.history, req.userMessage)];
+    const first = await searchAll(engineId, apiKey, queries);
+    let hits = interleaveHits(first, queries.length === 1 ? 5 : MAX_PLANNED_HITS);
+
+    const missing = missingTerms(keyTerms(req.userMessage), hits);
+    // The demo model has no real answers to give, so it cannot write queries
+    // either; asking it would only spend search quota on its canned text.
+    if (missing.length > 0 && planner.provider !== "demo") {
+      const planned = await planQueries(planner, missing).catch(() => [] as string[]);
+      const extra = planned.filter((q) => !queries.some((had) => had.toLowerCase() === q.toLowerCase()));
+      if (extra.length > 0) {
+        const more = await searchAll(engineId, apiKey, extra).catch(() => [] as SearchHit[][]);
+        if (more.length > 0) {
+          hits = interleaveHits([hits, ...more], MAX_PLANNED_HITS);
+          queries.push(...extra);
+        }
+      }
+    }
+
+    // Read the top results in full when asked. Shared like the search, so
+    // a relay of five agents reads each page once, not five times.
+    if (req.settings.readFullPages) hits = await readFullPages(hits, controller.signal);
+    return {
+      context: formatSearchContext(queries, hits),
+      citations: hits.map((h) => ({ url: h.url, title: h.title || undefined })),
+    };
+  };
+
+  /**
+   * Asks a model for search queries aimed at what a search missed. The agent
+   * that needed the search answers, on its own key; a short reply, counted
+   * against the session budget like any other. Thirty seconds at most: a
+   * slow planner must not hold up the answer it was meant to improve.
+   */
+  const planQueries = async (agent: AgentSpec, missing: string[]): Promise<string[]> => {
+    const target = resolveTarget(agent);
+    const limit = new AbortController();
+    const timer = setTimeout(() => limit.abort(new Error("The search planner took too long.")), 30_000);
+    const stop = () => limit.abort(controller.signal.reason);
+    controller.signal.addEventListener("abort", stop, { once: true });
+    try {
+      const previous = [...req.history].reverse().find((t) => t.role === "user")?.content;
+      const result = await target.adapter.chat({
+        model: agent.model,
+        apiKey: agent.apiKey,
+        baseUrl: target.baseUrl,
+        providerLabel: target.label,
+        providerId: agent.provider,
+        webSearch: false,
+        detailedCoT: false,
+        system: PLANNER_SYSTEM,
+        messages: [
+          { role: "user", content: plannerPrompt(req.userMessage, missing, previous ? trimQuery(previous, 300) : undefined) },
+        ],
+        maxOutputTokens: 300,
+        signal: limit.signal,
+        handlers: { onToken: () => {} },
+      });
+      tokenGuard.addUsage(
+        result.usage.outputTokens > 0
+          ? result.usage
+          : { inputTokens: result.usage.inputTokens, outputTokens: estimateTokens(result.text.length) }
+      );
+      return parsePlannedQueries(result.text, COT_END);
+    } finally {
+      clearTimeout(timer);
+      controller.signal.removeEventListener("abort", stop);
+    }
   };
 
   /** Everyone who has spoken in this chat or is speaking now, by any name the history used. */
@@ -533,7 +634,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
            * about databases and TLS.
            */
           if (worthSearching(searchQueryFor(req.history, req.userMessage))) {
-            const shared = await searchOnce(engine.id, searchKey);
+            const shared = await searchOnce(engine.id, searchKey, agent);
             searchContext = shared.context;
             searchCitations = shared.citations;
             didSearch = true;
@@ -565,8 +666,8 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
       poke();
 
       let result: Awaited<ReturnType<typeof target.adapter.chat>>;
-      try {
-        result = await target.adapter.chat({
+      const callModel = (maxOutputTokens: number) =>
+        target.adapter.chat({
           model: agent.model,
           apiKey: agent.apiKey,
           baseUrl: target.baseUrl,
@@ -588,7 +689,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
               : continuationPrompt(runningHistory, priorThisRound, agent.name),
             searchContext
           ),
-          maxOutputTokens: req.settings.maxOutputTokens,
+          maxOutputTokens,
           signal: agentController.signal,
           handlers: {
             onActivity: poke,
@@ -617,6 +718,30 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
             },
           },
         });
+
+      /*
+       * Asked for a longer reply than this provider allows for this model,
+       * the request is refused outright, every time: Groq's free tier caps
+       * Qwen at 1,000 output tokens a minute, and a Reply length of 1,351
+       * failed with "rate limit" until the setting was changed. Most
+       * providers state the limit in the refusal, so the request is made
+       * once more at that limit, and the card says it was shortened. Only
+       * when nothing has streamed: a retry after that would repeat text.
+       */
+      let cappedTo: number | undefined;
+      try {
+        try {
+          result = await callModel(req.settings.maxOutputTokens);
+        } catch (first) {
+          const limit =
+            streamedChars === 0 && !stalled && !controller.signal.aborted
+              ? outputLimitFrom(first, req.settings.maxOutputTokens)
+              : null;
+          if (!limit) throw first;
+          cappedTo = limit;
+          poke();
+          result = await callModel(limit);
+        }
       } catch (err) {
         if (stalled && !controller.signal.aborted) {
           const minutes = Math.round(idleMs / 60_000);
@@ -686,7 +811,9 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
         agreed: agreed.has(agent.id),
         // Lets the UI explain a reply that stops mid-sentence.
         finishReason: result.finishReason,
-        replyLimit: req.settings.maxOutputTokens,
+        replyLimit: cappedTo ?? req.settings.maxOutputTokens,
+        // Shortened to fit the provider's limit: what was asked, what was allowed, and by whom.
+        capped: cappedTo ? { to: cappedTo, from: req.settings.maxOutputTokens, by: target.label } : undefined,
         // Pages the model consulted, when it searched. Without these the
         // search is invisible: the answer is better but unverifiable.
         citations,

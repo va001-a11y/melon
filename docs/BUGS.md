@@ -1307,6 +1307,40 @@ long wait here is usually the provider" — true, and no help when the wait
 has no end. It also covers the request itself, not only the stream: a
 provider that never sends its first byte is the case that went unnoticed.
 
+### One search for five names found two of them (2026-11-02)
+
+Asked "what are Tiamat / Argus / Khonsu / Gevurah / Drygioni? in the context
+of SCP?", Melon sent the whole question as a single search. The engine
+returned five pages about the two best-known names, and the agent said —
+correctly, as designed — that the results defined none of the other three.
+Each has pages of its own one search away. The model was honest; the search
+was the weak link.
+
+Searching is now planned, cheapest first, because a model call costs the
+user time and money. A list in the question is split into one search per
+item, for free. Otherwise the question is searched as before. Then Melon
+checks, again for free, that every name in the question turns up somewhere
+in the results, and only when one does not is a model asked for queries
+aimed at what is missing. Results from several searches share the room one
+search's five had, so the context does not grow.
+
+The built-in demo model never plans: it has no real answers, and an old
+test showed its canned reply being searched for as though it were queries.
+
+### "Rate limit" for a reply no wait would allow (2026-11-02)
+
+Qwen on Groq failed with "Rate limit or quota exceeded". Groq's tier allows
+that model 1,000 output tokens a minute, and the Reply length asked for
+1,351 in one request: refused every time, however long anyone waited. Groq
+sends it as a 429, so Melon called it a rate limit.
+
+Not a Groq quirk: OpenAI ("supports at most 4096 completion tokens"),
+Anthropic ("max_tokens: 10000 > 8192") and others refuse the same way in
+their own words. Melon now reads the limit out of the refusal, whoever wrote
+it, asks once more at that limit if nothing has streamed yet, and the card
+says the reply was shortened and to what. When no number can be read, the
+error says to lower Reply length instead of to wait.
+
 ---
 
 ## Testing notes that cost time to learn

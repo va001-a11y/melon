@@ -209,6 +209,11 @@ export interface AgentResponse {
   finishReason?: "stop" | "length" | "filtered" | "unknown";
   /** The reply-length cap in force at the time, for a precise explanation. */
   replyLimit?: number;
+  /**
+   * Set when the provider refused the Reply length and Melon asked again at
+   * the provider's own limit: what was asked, what was allowed, and by whom.
+   */
+  capped?: { to: number; from: number; by: string };
   /** Pages the model consulted, when web search was on. */
   citations?: Citation[];
   /** Whether web search was requested for this agent on this run. */

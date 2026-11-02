@@ -97,7 +97,7 @@ async function conversation(readFullPages: boolean) {
     const u = String(url);
     if (u.startsWith("https://google.serper.dev/")) {
       counts.serper++;
-      const organic = [1, 2, 3, 4, 5].map((n) => ({ link: `https://p${n}.test/`, title: `P${n}`, snippet: `one line ${n}` }));
+      const organic = [1, 2, 3, 4, 5].map((n) => ({ link: `https://p${n}.test/`, title: `P${n}`, snippet: `Node.js LTS, one line ${n}` }));
       return new Response(JSON.stringify({ organic }), { status: 200 });
     }
     if (u === "https://r.jina.ai/") {

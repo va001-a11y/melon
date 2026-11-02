@@ -1,0 +1,217 @@
+/**
+ * Planning a search, cheapest first (2026-11-02). Asked "what are Tiamat /
+ * Argus / Khonsu / Gevurah / Drygioni? in the context of SCP?", Melon sent the
+ * whole question as one search, got five pages about the two best-known
+ * names, and the agents rightly said the other three were not covered.
+ *
+ * Also here: a provider refusing the Reply length, which Groq reported as a
+ * rate limit and Melon passed on as one, though no wait would ever fix it.
+ */
+import { test, before, after, beforeEach } from "node:test";
+import assert from "node:assert/strict";
+import {
+  interleaveHits,
+  keyTerms,
+  missingTerms,
+  parsePlannedQueries,
+  PLANNER_SYSTEM,
+  splitListQuery,
+} from "../core/src/searchPlan.ts";
+import { formatSearchContext } from "../core/src/search.ts";
+import { outputLimitFrom } from "../core/src/providers/sse.ts";
+import { runConversation } from "../core/src/index.ts";
+
+const SCP = "what are Tiamat / Argus / Khonsu / Gevurah / Drygioni? in the context of SCP?";
+
+/* ---------- the free rule ---------- */
+
+test("a list in the question becomes one query per item, each with the question's context", () => {
+  assert.deepEqual(splitListQuery(SCP), ["Tiamat SCP", "Argus SCP", "Khonsu SCP", "Gevurah SCP", "Drygioni SCP"]);
+  assert.deepEqual(splitListQuery("Compare Paris, London and Berlin"), ["Paris", "London", "Berlin"]);
+});
+
+test("prose that merely contains commas, and short lists, are left as one search", () => {
+  for (const q of [
+    "However, as I said, the results were mixed and inconclusive.",
+    "Is it safe to mix bleach and vinegar?",
+    "What is the difference between TCP and UDP?",
+    "In 1990, the company, which was founded in Paris, moved.",
+  ]) {
+    assert.deepEqual(splitListQuery(q), [], q);
+  }
+});
+
+test("names in a question are what a search is checked for", () => {
+  assert.deepEqual(keyTerms(SCP), ["Tiamat", "Argus", "Khonsu", "Gevurah", "Drygioni", "SCP"]);
+  assert.deepEqual(keyTerms("what is the tallest mountain?"), [], "nothing named, so nothing can be found missing");
+  assert.deepEqual(
+    missingTerms(["Khonsu", "SCP"], [{ url: "https://scp-wiki.net/", title: "SCP classes", snippet: "Keter…" }]),
+    ["Khonsu"]
+  );
+});
+
+test("a planner's reply is reduced to its queries", () => {
+  const reply = "===REASONING===\nthink\n===ANSWER===\n1. Khonsu SCP object class\n- \"Gevurah SCP\"\n\n* Khonsu SCP object class";
+  assert.deepEqual(parsePlannedQueries(reply, "===ANSWER==="), ["Khonsu SCP object class", "Gevurah SCP"]);
+  assert.deepEqual(parsePlannedQueries("<think>hmm</think>Drygioni SCP", "===ANSWER==="), ["Drygioni SCP"]);
+});
+
+test("merged results take each search's best first, drop duplicates and stop at the cap", () => {
+  const h = (url: string) => ({ url });
+  const merged = interleaveHits([[h("a1"), h("a2"), h("x")], [h("b1"), h("x")], [h("c1")]], 5);
+  assert.deepEqual(merged.map((m) => m.url), ["a1", "b1", "c1", "a2", "x"]);
+});
+
+test("more results share the room five had, so the search block does not grow", () => {
+  const hits = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ url: `https://e.com/${i}`, title: `t${i}`, snippet: "x".repeat(5000) }));
+  const five = formatSearchContext("q", hits(5)).length;
+  const eight = formatSearchContext(["q1", "q2"], hits(8)).length;
+  assert.ok(eight < five * 1.15, `eight results took ${eight} characters against five's ${five}`);
+});
+
+/* ---------- output limits, as each provider words them ---------- */
+
+test("a provider's reply-length limit is read from its refusal, whoever words it", () => {
+  const groq =
+    "Groq request failed (429) — Provider said: Request too large for model `qwen/qwen3.8-27b` on output tokens per " +
+    "minute (OTPM): Limit 1000, Requested 1351. reduce max_tokens and try again.";
+  assert.equal(outputLimitFrom(new Error(groq), 1351), 1000);
+  assert.equal(outputLimitFrom("max_tokens is too large: 9000. This model supports at most 4096 completion tokens", 9000), 4096);
+  assert.equal(outputLimitFrom("max_tokens: 10000 > 8192, which is the maximum allowed number of output tokens", 10000), 8192);
+  assert.equal(outputLimitFrom("max_tokens must be less than or equal to 2048", 4096), 2048);
+});
+
+test("other refusals are not mistaken for a reply-length limit", () => {
+  assert.equal(outputLimitFrom("This model's maximum context length is 8192 tokens; you requested 9000", 2000), null);
+  assert.equal(
+    outputLimitFrom("Request too large on tokens per minute (TPM): Limit 6000, Requested 7200", 1000),
+    null,
+    "a limit on the whole request, which a shorter reply does not fix"
+  );
+  assert.equal(outputLimitFrom("Rate limit reached for requests", 1000), null);
+  assert.equal(outputLimitFrom("at most 4096 completion tokens", 1000), null, "already within it");
+});
+
+/* ---------- the whole run, with the search engine and the model stood in ---------- */
+
+const realFetch = globalThis.fetch;
+let searches: string[] = [];
+let modelCalls: { system: string; max: number; user: string }[] = [];
+
+/** Pages that exist for each name, as a real search would find them alone. */
+const PAGES: Record<string, string> = {
+  Tiamat: "In SCP lore, Tiamat is a classification for anomalies that pose an immediate threat.",
+  Argus: "Argus is an SCP esoteric class.",
+  Khonsu: "SCP Khonsu objects are contained by being kept in time.",
+  Gevurah: "Gevurah is an SCP esoteric class for anomalies requiring judgement.",
+  Drygioni: "In SCP, Drygioni describes anomalies whose containment is self-sustaining.",
+  Zorblax: "Zorblax Industries was founded by Ada Quill in 1987.",
+};
+
+function searchResults(query: string) {
+  // One search for everything returns only the best-known names, as Tavily did.
+  if (query.includes("/")) return ["Tiamat", "Argus"].map((n) => ({ url: `https://wiki.example/${n}`, title: n, content: PAGES[n] }));
+  // A query for the company's founder finds only pages that never name it.
+  if (/who founded/i.test(query)) return [{ url: "https://news.example/founders", title: "Founders", content: "Famous founders." }];
+  return Object.keys(PAGES)
+    .filter((n) => query.includes(n))
+    .map((n) => ({ url: `https://wiki.example/${n}`, title: n, content: PAGES[n] }));
+}
+
+function sse(text: string) {
+  return new Response(
+    `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n` +
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`,
+    { status: 200, headers: { "content-type": "text/event-stream" } }
+  );
+}
+
+before(() => {
+  globalThis.fetch = (async (url: string | URL, init: RequestInit = {}) => {
+    const href = String(url);
+    const body = JSON.parse(String(init.body ?? "{}"));
+    if (href.startsWith("https://api.tavily.com/")) {
+      searches.push(body.query);
+      return new Response(JSON.stringify({ results: searchResults(body.query) }), { status: 200 });
+    }
+    if (href.includes("/chat/completions")) {
+      const system = String(body.messages?.[0]?.content ?? "");
+      const user = String(body.messages?.[body.messages.length - 1]?.content ?? "");
+      modelCalls.push({ system, max: body.max_tokens, user });
+      if (system === PLANNER_SYSTEM) return sse("Zorblax Industries founder");
+      if (body.model === "capped" && body.max_tokens > 1000) {
+        return new Response(
+          JSON.stringify({
+            error: { message: "Request too large on output tokens per minute (OTPM): Limit 1000, Requested 1351. Reduce max_tokens." },
+          }),
+          { status: 429 }
+        );
+      }
+      return sse("An answer.");
+    }
+    return new Response("not found", { status: 404 });
+  }) as typeof fetch;
+});
+after(() => {
+  globalThis.fetch = realFetch;
+});
+beforeEach(() => {
+  searches = [];
+  modelCalls = [];
+});
+
+async function ask(question: string, model = "m", maxOutputTokens = 512) {
+  const events: { type: string; data: any }[] = [];
+  await runConversation(
+    {
+      userMessage: question,
+      history: [],
+      agents: [{ id: "a", name: "A", model, provider: "groq", apiKey: "test-key", role: "researcher", webSearch: true }],
+      settings: {
+        mode: "professional",
+        detailedCoT: false,
+        maxOutputTokens,
+        sessionOutputBudget: 0,
+        searchProvider: "tavily",
+        searchApiKey: "test-search-key",
+      },
+    } as Parameters<typeof runConversation>[0],
+    { send: (type: string, data: unknown) => events.push({ type, data }), end() {}, onClose() {} } as any
+  );
+  return events;
+}
+
+const prompts = () => modelCalls.filter((c) => c.system !== PLANNER_SYSTEM).map((c) => c.user).join("\n");
+const plannerCalls = () => modelCalls.filter((c) => c.system === PLANNER_SYSTEM).length;
+
+test("the SCP question: five searches by the free rule, every name found, and no extra model call", async () => {
+  const events = await ask(SCP);
+  assert.deepEqual(events.filter((e) => e.type === "agent-error").map((e) => e.data.message), []);
+  assert.equal(searches.length, 5);
+  assert.equal(plannerCalls(), 0, "the rule found everything, so no model was asked");
+  for (const name of ["Khonsu", "Gevurah", "Drygioni"]) assert.ok(prompts().includes(PAGES[name]), name);
+});
+
+test("a question the first search answers costs one search and no extra model call", async () => {
+  await ask("What is Khonsu in SCP?");
+  assert.equal(searches.length, 1);
+  assert.equal(plannerCalls(), 0);
+});
+
+test("only when a name is missing from the results is a model asked for queries, once", async () => {
+  await ask("Who founded Zorblax Industries?");
+  assert.equal(plannerCalls(), 1);
+  assert.deepEqual(searches, ["Who founded Zorblax Industries?", "Zorblax Industries founder"]);
+  assert.ok(prompts().includes(PAGES.Zorblax), "the planned search's page reaches the agent");
+});
+
+test("a refused reply length is asked again at the provider's limit, and the card is told", async () => {
+  const events = await ask("What is Khonsu in SCP?", "capped", 1351);
+  assert.deepEqual(events.filter((e) => e.type === "agent-error").map((e) => e.data.message), []);
+  const answers = modelCalls.filter((c) => c.system !== PLANNER_SYSTEM);
+  assert.deepEqual(answers.map((c) => c.max), [1351, 1000]);
+  const done = events.find((e) => e.type === "agent-done");
+  assert.deepEqual(done?.data.capped, { to: 1000, from: 1351, by: "Groq (very fast)" });
+  assert.equal(done?.data.replyLimit, 1000);
+});

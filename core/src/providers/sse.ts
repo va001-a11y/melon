@@ -63,6 +63,44 @@ function extractMessage(bodyText: string): string {
 }
 
 /**
+ * Whether an error is a provider refusing the reply length Melon asked for.
+ * Context-window errors mention tokens too, but shortening the reply does
+ * not fix those, so they are not counted.
+ */
+export function isOutputLimitError(text: string): boolean {
+  const aboutOutput =
+    /max_tokens|max_completion_tokens|max_output_tokens|maxOutputTokens|output tokens|completion tokens|\bOTPM\b/i;
+  return aboutOutput.test(text) && !/context (?:length|window)|prompt is too long|input tokens/i.test(text);
+}
+
+/**
+ * The reply length a provider says it allows, read from its error, when that
+ * is less than what was asked. Every provider words it differently:
+ *
+ *   Groq       "… output tokens per minute (OTPM): Limit 1000, Requested 1351"
+ *   OpenAI     "… This model supports at most 4096 completion tokens"
+ *   Anthropic  "max_tokens: 10000 > 8192, which is the maximum allowed …"
+ *   others     "max_tokens must be less than or equal to 8192", "… in [1, 8192]"
+ *
+ * Null when the error is about something else or names no usable number, so
+ * the caller reports it as it came rather than guessing.
+ */
+export function outputLimitFrom(error: unknown, requested: number): number | null {
+  const text = error instanceof Error ? error.message : String(error);
+  if (!isOutputLimitError(text)) return null;
+  const num = (s: string | undefined) => (s ? Number(s.replace(/,/g, "")) : NaN);
+  const found =
+    num(text.match(/limit[:\s]+([\d,]+)\s*,\s*requested/i)?.[1]) ||
+    num(text.match(/at most ([\d,]+) (?:completion|output) tokens/i)?.[1]) ||
+    num(text.match(/max_tokens:?\s*[\d,]+\s*>\s*([\d,]+)/i)?.[1]) ||
+    num(text.match(/\[\s*1\s*,\s*([\d,]+)\s*\]/)?.[1]) ||
+    num(
+      text.match(/(?:less than or equal to|<=|≤|no (?:more|greater) than|at most|up to|maximum(?: value)? (?:is|of))\s*([\d,]+)/i)?.[1]
+    );
+  return Number.isFinite(found) && found >= 16 && found < requested ? found : null;
+}
+
+/**
  * Turn a failed HTTP response into an error a user can act on. Raw status
  * codes and HTML dumps are useless in a chat card; these say what to fix.
  */
@@ -106,6 +144,17 @@ export async function throwHttpError(res: Response, provider: string, url: strin
       break;
     default:
       hint = "";
+  }
+
+  /*
+   * A reply longer than this provider allows for this model. Groq sends it
+   * as a 429, which read as "rate limit — wait and retry", when no amount of
+   * waiting helps: the request is refused every time until it asks for less.
+   */
+  if (isOutputLimitError(detail)) {
+    hint =
+      "This provider allows shorter replies from this model than your Reply length asks for. " +
+      "Lower Reply length in Settings, or use a plan with a higher limit.";
   }
 
   const parts = [`${provider} request failed (${res.status})`];

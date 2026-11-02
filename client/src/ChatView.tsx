@@ -591,7 +591,16 @@ function AgentCard({
         sentence that was never started, and "ask it to continue" points at a
         button that has nothing to continue from.
       */}
-      {response.status === "done" && response.finishReason === "length" && (
+      {/* The provider refused the Reply length, so Melon asked again at its limit. */}
+      {response.status === "done" && response.capped && (
+        <div className="cutoff-note">
+          <b>Shortened to {response.capped.to.toLocaleString()} tokens.</b> {response.capped.by} allows replies of at
+          most {response.capped.to.toLocaleString()} tokens from this model, so Melon asked again with that instead
+          of your Reply length of {response.capped.from.toLocaleString()}. Set <b>Settings → Reply length</b> to{" "}
+          {response.capped.to.toLocaleString()} or less to skip the refused request next time.
+        </div>
+      )}
+      {response.status === "done" && response.finishReason === "length" && !response.capped && (
         <div className="cutoff-note">
           {!answer && cot ? (
             <>

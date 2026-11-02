@@ -172,6 +172,8 @@ Five providers search the web natively — Anthropic, Google, OpenRouter, Perple
 
 Everything else has no search tool at all. For those, **Melon can do the searching itself**: it queries a search API, hands the results to the model as source material, and lists them as sources on the reply. That includes local models — an Ollama model on your own machine can answer from today's web.
 
+**What it searches for, cheapest first.** A question naming several things — "what are Tiamat / Argus / Khonsu in SCP?" — is split into one search per item, each carrying the context ("Khonsu SCP"), so the best-known name cannot crowd out the rest. Otherwise the question is searched as it is. Melon then checks, for free, that every name in the question appears somewhere in the results. Only if one is missing does it ask the agent's model for better queries and search again: one short extra request, on that agent's key, and only when the cheap search visibly missed something. A split question uses one search per item from your search engine's quota, up to five.
+
 Set it up in **Settings → Web search**. It needs its own key, separate from your model keys:
 
 | Engine | What it is | Returns | Hosted site |
