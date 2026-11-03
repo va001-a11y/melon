@@ -10,6 +10,48 @@ reason is the part that is hard to recover later.
 
 ---
 
+## v0.7.3 — 2026-11-03
+
+**Lock your API keys with a passphrase.** Keys were stored in the browser as
+plain text, readable by anyone at the computer, by anything copying the
+browser profile, and on the hosted site by other pages on the same origin.
+*Settings → Lock your API keys* encrypts them (AES-256, key from PBKDF2 at
+600,000 rounds), and Melon asks for the passphrase each time it opens.
+Wrong guesses make you wait — five free, then 30 seconds doubling to 15
+minutes — and Melon never deletes keys for wrong guesses, since that would
+let anyone at the keyboard erase them. A forgotten passphrase opens Melon
+with everything but the keys. Needs HTTPS or localhost.
+
+**Resize replies by dragging.** A grip on every reply's right edge sets the
+width of all of them at once, live, and Melon remembers it. Left automatic,
+a lone reply no longer stretches across a wide screen at two hundred
+characters a line: replies share the row, each at most 780px. It replaced,
+within the same release, a three-way dropdown that said nothing about a
+single reply.
+
+**Searches are planned, cheapest first.** A question naming several things
+is split into one search per item, so the best-known name cannot crowd out
+the rest. Melon then checks for free that every name asked about turns up
+in the results, and only when one does not asks the agent's model for
+better queries — one short extra request, only when the cheap search
+visibly missed something.
+
+**A refused reply length is retried at the provider's limit.** When a
+provider allows a model fewer output tokens than Reply length asks for,
+Melon reads the limit from the refusal — whichever provider wrote it — asks
+again at that limit, and says on the card that the reply was shortened.
+
+**Using Melon away from its own machine.** The README now says what anyone
+on the network can and cannot do once Melon's port is published, and the
+safe ways to reach it from elsewhere: a VPN such as Tailscale, or a proxy
+adding HTTPS and a login — never a forwarded port.
+
+Fixed in this release, in [BUGS.md](BUGS.md): a provider that never answers
+no longer holds a run forever; a renamed agent no longer becomes two in the
+models' eyes, which had one agent writing a turn as its teammate and
+another answering the previous question; citation numbers match the source
+list; and the release zip carries its icons and tests.
+
 ## v0.7.2 — 2026-10-26
 
 **A tab icon.** Browsers showed their grey placeholder globe for Melon, so
