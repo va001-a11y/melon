@@ -1350,6 +1350,25 @@ provider's lower limit is learned once and kept for the run. And a reply
 that wrote nothing still said "8 sources" under it; it now says those were
 pages it was given, none cited, and marks the ones read in full.
 
+### Follow links did nothing, however it was set (2026-11-04)
+
+Found when the user asked the same question with Follow links on and saw
+no page marked "read in full". The switch was saved on the agent and shown
+in its properties, but the run request was built field by field and the
+list was never told about it: every live run had link-following off. Its
+eleven tests all passed, because they called the core directly and never
+went through that list — pattern 3, "a field is added to a type but
+dropped in transit", for the second time.
+
+The request is now built by one function whose return type names every
+field the core's agent type has, so a field added there and forgotten
+here fails the build rather than vanishing; deleting the line for Follow
+links was confirmed to stop it compiling. A test covers the same path.
+
+The same run produced a wrong definition of Tiamat, generalised from a
+single Tiamat-class article. The search instructions now say that a source
+which only uses a term does not define it.
+
 **The page that defined both names was in no result at all.** Link
 following cannot reach a page no result leads to; only a better search
 can. Which search engine is used matters as much as anything here.

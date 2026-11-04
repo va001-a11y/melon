@@ -288,4 +288,5 @@ test("the model is told that missing from the results is not evidence of anythin
   const block = formatSearchContext("q", [{ url: "https://e.com/", title: "t", snippet: "s" }]);
   assert.match(block, /never conclude/i);
   assert.match(block, /does not exist/);
+  assert.match(block, /used but not defined/, "an example of a term is not its definition");
 });

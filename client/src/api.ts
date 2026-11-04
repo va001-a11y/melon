@@ -1,4 +1,5 @@
 import { RUNS_LOCALLY } from "./target";
+import { toRunAgent } from "./wire";
 import type { Agent, AnalyticsSnapshot, Attachment, Bundle, Citation, GuardState, RegistryInfo, Settings, Usage } from "./types";
 
 /**
@@ -265,19 +266,7 @@ export async function runConversation(
     settings: wireSettings,
     attachments,
     device: deviceProfile(),
-    agents: agents.map((a) => ({
-      id: a.id,
-      name: a.name,
-      provider: a.provider,
-      model: a.model,
-      apiKey: a.apiKey || undefined,
-      baseUrl: a.baseUrl || undefined,
-      role: a.role,
-      personality: a.personality || undefined,
-      groupPersonality: groupPersonalities[a.role]?.trim() || undefined,
-      webSearch: a.webSearch === true,
-      team: a.team ?? 1,
-    })),
+    agents: agents.map((a) => toRunAgent(a, groupPersonalities)),
   };
 
   // The hosted build has no server to post to — the core runs right here.

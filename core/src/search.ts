@@ -743,7 +743,10 @@ export function formatSearchContext(
     // real; a search had simply missed them. Absence from a handful of results is not evidence.
     `If they do not cover something the question asks about, say that the results do not cover it, and stop ` +
     `there: never conclude from that that it is false, made up, unofficial or does not exist. A search can ` +
-    `simply miss things.\n\n` +
+    `simply miss things. A source that only uses a term -- an article about one item of a class, say -- ` +
+    // Qwen defined the Tiamat class from a single Tiamat-class article, and got it wrong.
+    `does not define it: do not present what you infer from an example as what the term means. Say the ` +
+    `sources show it used but not defined.\n\n` +
     body +
     unsearched
   );
