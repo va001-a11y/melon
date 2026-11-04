@@ -18,6 +18,8 @@ export interface HistoryTurn {
 export interface RunCallbacks {
   onRoundStart: (round: number) => void;
   onAgentStart: (agentId: string, round?: number) => void;
+  /** Following links: pages opened so far, of the limit. */
+  onReading?: (agentId: string, opened: number, limit: number, round?: number) => void;
   onToken: (agentId: string, text: string, round?: number) => void;
   onAgentDone: (
     agentId: string,
@@ -349,6 +351,9 @@ function dispatch(event: string, data: any, callbacks: RunCallbacks): boolean {
         break;
       case "agent-start":
         callbacks.onAgentStart(data.agentId, data.round);
+        break;
+      case "reading":
+        callbacks.onReading?.(data.agentId, data.opened, data.limit, data.round);
         break;
       case "token":
         callbacks.onToken(data.agentId, data.text, data.round);

@@ -1,4 +1,22 @@
 import type { Agent, Settings } from "./types";
+import { PROVIDERS, webSearchBlockReason } from "@melon/core";
+
+/*
+ * The worst case of following links, so the preflight shows it before the
+ * user sends rather than after. One choice per page, each re-reading the
+ * search results and the pages opened so far, then the answer reading every
+ * page: a search block, a page read in full, and the choice prompt itself.
+ */
+const SEARCH_BLOCK_TOKENS = 2500;
+const OPENED_PAGE_TOKENS = 790;
+const CHOICE_PROMPT_TOKENS = 300;
+const CHOICE_REPLY_TOKENS = 150;
+
+function followsLinks(agent: Agent, settings: Settings): boolean {
+  const melonSearch = Boolean(settings.searchProvider && (settings.searchApiKeys?.[settings.searchProvider] ?? "").trim());
+  const def = PROVIDERS.find((p) => p.id === agent.provider);
+  return melonSearch && agent.webSearch === true && agent.followLinks === true && webSearchBlockReason(def, agent.model) !== null;
+}
 
 /** USD per 1M tokens, keyed by substring match on the model id. */
 interface Price {
@@ -66,8 +84,17 @@ export function estimateRun(
   for (const agent of agents) {
     // Reasoning output roughly doubles the answer; RAW CoT is more verbose still.
     const outFactor = settings.detailedCoT ? 0.85 : 0.6;
-    const agentOut = Math.round(settings.maxOutputTokens * outFactor);
-    inputTokens += perAgentInput;
+    let agentIn = perAgentInput;
+    let agentOut = Math.round(settings.maxOutputTokens * outFactor);
+    if (followsLinks(agent, settings)) {
+      const pages = settings.linkLimit;
+      for (let opened = 0; opened < pages; opened++) {
+        agentIn += SEARCH_BLOCK_TOKENS + opened * OPENED_PAGE_TOKENS + CHOICE_PROMPT_TOKENS;
+      }
+      agentIn += pages * OPENED_PAGE_TOKENS;
+      agentOut += pages * CHOICE_REPLY_TOKENS;
+    }
+    inputTokens += agentIn;
     outputTokens += agentOut;
 
     if (isFree(agent)) {
@@ -79,7 +106,7 @@ export function estimateRun(
       hasUnpriced = true;
       continue;
     }
-    usd += (perAgentInput / 1e6) * price.in + (agentOut / 1e6) * price.out;
+    usd += (agentIn / 1e6) * price.in + (agentOut / 1e6) * price.out;
   }
 
   return { inputTokens, outputTokens, usd, hasUnpriced, freeCount };

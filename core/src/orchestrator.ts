@@ -36,6 +36,19 @@ import {
 import { ollamaMaxContext } from "./providers/ollama.js";
 import { outputLimitFrom } from "./providers/sse.js";
 import {
+  LINK_SELECT_SYSTEM,
+  OPENED_PAGE_CHARS,
+  formatOpenedPages,
+  linkLimitOf,
+  numberCandidates,
+  parseSelection,
+  rankLinks,
+  readPage,
+  samePage,
+  selectionPrompt,
+} from "./followLinks.js";
+import type { Link, ReadPage } from "./followLinks.js";
+import {
   PLANNER_SYSTEM,
   interleaveHits,
   keyTerms,
@@ -303,7 +316,22 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
   const searchReserve = melonSearchPossible
     ? searchReserveTokens(req.settings.searchProvider, req.settings.readFullPages === true, budget)
     : 0;
-  const usableWindow = Math.max(1000, smallest - req.settings.maxOutputTokens - 800 - searchReserve);
+  /*
+   * Pages an agent opens join the search results in its prompt, so their room
+   * is reserved too — only when some agent may follow links, and only as many
+   * pages as the limit allows.
+   */
+  const linkLimit = linkLimitOf(req.settings.linkLimit);
+  const linksPossible =
+    melonSearchPossible &&
+    req.agents.some(
+      (a) =>
+        a.followLinks === true &&
+        a.webSearch === true &&
+        webSearchBlockReason(getProvider(a.provider), a.model) !== null
+    );
+  const linkReserve = linksPossible ? linkLimit * Math.ceil(OPENED_PAGE_CHARS / 4 + 40) : 0;
+  const usableWindow = Math.max(1000, smallest - req.settings.maxOutputTokens - 800 - searchReserve - linkReserve);
   const startingContext = contextTokens(req.history, req.userMessage, req.attachments ?? []);
   if (startingContext >= usableWindow) {
     sink.send("context-full", { used: startingContext, limit: usableWindow });
@@ -429,7 +457,13 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
    */
   /** Set when a listed question had more items than were searched, for the card to say so. */
   type Coverage = { searched: number; of: number; limitedBy: "setting" | "room" };
-  let sharedSearch: Promise<{ context: string; citations: Citation[]; coverage?: Coverage }> | null = null;
+  let sharedSearch: Promise<{
+    context: string;
+    citations: Citation[];
+    coverage?: Coverage;
+    /** Results already read in full, which following links need not open again. */
+    readInFull: Set<string>;
+  }> | null = null;
   const searchOnce = (engineId: string, apiKey: string, planner: AgentSpec) => {
     if (!sharedSearch) sharedSearch = plannedSearch(engineId, apiKey, planner);
     return sharedSearch;
@@ -497,6 +531,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
       coverage: notSearched.length
         ? { searched: listed.length, of: listedAll.length, limitedBy: budget.limitedBy }
         : undefined,
+      readInFull: new Set(hits.filter((h) => h.fullPage).map((h) => samePage(h.url))),
     };
   };
 
@@ -507,13 +542,29 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
    * slow planner must not hold up the answer it was meant to improve.
    */
   const planQueries = async (agent: AgentSpec, missing: string[]): Promise<string[]> => {
+    const previous = [...req.history].reverse().find((t) => t.role === "user")?.content;
+    const reply = await askQuietly(
+      agent,
+      PLANNER_SYSTEM,
+      plannerPrompt(req.userMessage, missing, previous ? trimQuery(previous, 300) : undefined),
+      "The search planner took too long."
+    );
+    return parsePlannedQueries(reply, COT_END);
+  };
+
+  /**
+   * A short request to an agent's model that the user never sees: planning a
+   * search, choosing pages. On the agent's own key, counted against the
+   * session budget like any reply, and given thirty seconds — a slow helper
+   * must not hold up the answer it is meant to improve.
+   */
+  const askQuietly = async (agent: AgentSpec, system: string, prompt: string, slowMessage: string): Promise<string> => {
     const target = resolveTarget(agent);
     const limit = new AbortController();
-    const timer = setTimeout(() => limit.abort(new Error("The search planner took too long.")), 30_000);
+    const timer = setTimeout(() => limit.abort(new Error(slowMessage)), 30_000);
     const stop = () => limit.abort(controller.signal.reason);
     controller.signal.addEventListener("abort", stop, { once: true });
     try {
-      const previous = [...req.history].reverse().find((t) => t.role === "user")?.content;
       const result = await target.adapter.chat({
         model: agent.model,
         apiKey: agent.apiKey,
@@ -522,10 +573,8 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
         providerId: agent.provider,
         webSearch: false,
         detailedCoT: false,
-        system: PLANNER_SYSTEM,
-        messages: [
-          { role: "user", content: plannerPrompt(req.userMessage, missing, previous ? trimQuery(previous, 300) : undefined) },
-        ],
+        system,
+        messages: [{ role: "user", content: prompt }],
         maxOutputTokens: 300,
         signal: limit.signal,
         handlers: { onToken: () => {} },
@@ -535,11 +584,100 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
           ? result.usage
           : { inputTokens: result.usage.inputTokens, outputTokens: estimateTokens(result.text.length) }
       );
-      return parsePlannedQueries(result.text, COT_END);
+      return result.text;
     } finally {
       clearTimeout(timer);
       controller.signal.removeEventListener("abort", stop);
     }
+  };
+
+  /** Pages read this run, so two agents choosing the same page read it once. */
+  const pageReads = new Map<string, Promise<ReadPage | null>>();
+  const readOnce = (url: string) => {
+    const key = samePage(url);
+    let read = pageReads.get(key);
+    if (!read) {
+      read = readPage(url, controller.signal);
+      pageReads.set(key, read);
+    }
+    return read;
+  };
+
+  /** Words worth ranking links by: the question's names, and its longer words. */
+  const linkTerms = [
+    ...new Set([...keyTerms(req.userMessage), ...(req.userMessage.toLowerCase().match(/\p{L}{5,}/gu) ?? [])]),
+  ];
+
+  /**
+   * Lets an agent open pages linked from its results before it answers — see
+   * followLinks.ts. Returns the pages as a block to add to its material, and
+   * the sources they add, numbered on from the search results.
+   *
+   * Never fatal. A choice that fails, or a page that cannot be read, ends the
+   * reading and the agent answers from what it has; only a user's Stop ends
+   * the agent.
+   */
+  const followFromResults = async (
+    agent: AgentSpec,
+    round: number,
+    material: string,
+    citations: Citation[],
+    readInFull: Set<string>
+  ): Promise<{ block: string; added: Citation[] }> => {
+    const numbered = new Map(citations.map((c, i) => [samePage(c.url), i + 1]));
+    const opened: { n: number; page: ReadPage }[] = [];
+    const added: Citation[] = [];
+    const tried = new Set<string>(readInFull);
+    let pool: Link[] = citations.map((c) => ({ url: c.url, text: c.title || c.url }));
+
+    while (opened.length < linkLimit) {
+      const offer = new Map<string, Link>();
+      for (const link of pool) {
+        const key = samePage(link.url);
+        if (!tried.has(key) && !offer.has(key)) offer.set(key, link);
+      }
+      const candidates = numberCandidates(rankLinks([...offer.values()], linkTerms));
+      if (candidates.length === 0) break;
+
+      const remaining = linkLimit - opened.length;
+      sink.send("reading", { agentId: agent.id, round, opened: opened.length, limit: linkLimit });
+      let reply: string;
+      try {
+        reply = await askQuietly(
+          agent,
+          LINK_SELECT_SYSTEM,
+          selectionPrompt(req.userMessage, `${material}\n\n${formatOpenedPages(opened)}`.trim(), candidates, remaining),
+          "Choosing pages took too long."
+        );
+      } catch (err) {
+        if (controller.signal.aborted) throw err;
+        break;
+      }
+      const choice = parseSelection(reply, COT_END, remaining, new Set(candidates.map((c) => c.label)));
+      if (choice === "done" || choice.length === 0) break;
+
+      const chosen = choice.map((label) => candidates.find((c) => c.label === label)!.link);
+      const pages = await Promise.all(chosen.map((link) => readOnce(link.url)));
+      let readAny = false;
+      pages.forEach((page, i) => {
+        tried.add(samePage(chosen[i].url));
+        if (!page) return;
+        readAny = true;
+        const titled = { ...page, title: page.title || chosen[i].text };
+        const key = samePage(page.url);
+        let n = numbered.get(key);
+        if (!n) {
+          n = citations.length + added.length + 1;
+          numbered.set(key, n);
+          added.push({ url: page.url, title: titled.title, n });
+        }
+        opened.push({ n, page: titled });
+        pool = pool.concat(page.links);
+      });
+      sink.send("reading", { agentId: agent.id, round, opened: opened.length, limit: linkLimit });
+      if (!readAny) break;
+    }
+    return { block: formatOpenedPages(opened), added };
   };
 
   /** Everyone who has spoken in this chat or is speaking now, by any name the history used. */
@@ -652,6 +790,24 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
             searchCitations = shared.citations;
             searchCoverage = shared.coverage;
             didSearch = true;
+
+            if (agent.followLinks === true && searchCitations.length > 0) {
+              const followed = await followFromResults(
+                agent,
+                round,
+                searchContext,
+                searchCitations,
+                shared.readInFull
+              ).catch((err: unknown) => {
+                if (controller.signal.aborted) throw err;
+                return { block: "", added: [] as Citation[] };
+              });
+              if (followed.block) {
+                // New arrays: the shared search belongs to every agent in the run.
+                searchContext = `${searchContext}\n\n${followed.block}`;
+                searchCitations = [...searchCitations, ...followed.added];
+              }
+            }
           }
         }
       }

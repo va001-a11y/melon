@@ -29,6 +29,8 @@ interface Props {
   onGlobalPersonality: (v: string) => void;
   /** Whether Melon-side web search is configured; AgentForm needs it. */
   melonSearch: boolean;
+  /** Pages an agent that follows links may open, for the form's cost warning. */
+  linkLimit: number;
   onOpenAnalytics: () => void;
   onOpenMarketplace: () => void;
   onRetryProviders: () => void;
@@ -70,6 +72,7 @@ export function Sidebar(props: Props) {
     setAgents,
     providers,
     melonSearch,
+    linkLimit,
     chats,
     currentChatId,
     running,
@@ -248,6 +251,7 @@ export function Sidebar(props: Props) {
       role: draft.role,
       personality: draft.personality.trim(),
       webSearch: draft.webSearch === true,
+      followLinks: draft.followLinks === true,
     };
     if (editingId) {
       setAgents((prev) => prev.map((a) => (a.id === editingId ? { ...a, ...fields } : a)));
@@ -493,6 +497,7 @@ export function Sidebar(props: Props) {
             editingName={editingId ? agents.find((a) => a.id === editingId)?.name ?? null : null}
             onSave={saveAgent}
             melonSearch={melonSearch}
+            linkLimit={linkLimit}
             onRetryProviders={onRetryProviders}
           />
         )}

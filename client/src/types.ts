@@ -27,6 +27,8 @@ export interface Agent {
   color: string;
   /** Let this agent search the web, where its provider supports it. */
   webSearch?: boolean;
+  /** Open pages linked from Melon's search results before answering. Costs more; off by default. */
+  followLinks?: boolean;
   /** 1-based pipeline stage. Everything defaults to team 1. */
   team?: number;
 }
@@ -72,6 +74,8 @@ export interface Settings {
   readFullPages: boolean;
   /** Most items of a listed question searched separately, 1–25. */
   searchItems: number;
+  /** Most pages an agent that follows links may open for one answer, 1–10. */
+  linkLimit: number;
   /** Pipeline team names and briefs, keyed by team number. */
   teamNames?: Record<string, string>;
   teamBriefs?: Record<string, string>;
@@ -218,6 +222,8 @@ export interface AgentResponse {
   capped?: { to: number; from: number; by: string };
   /** A listed question had more items than were searched: how many were, and why not more. */
   coverage?: { searched: number; of: number; limitedBy: "setting" | "room" };
+  /** While following links, before any text: pages opened so far, of the limit. */
+  reading?: { opened: number; limit: number };
   /** Pages the model consulted, when web search was on. */
   citations?: Citation[];
   /** Whether web search was requested for this agent on this run. */

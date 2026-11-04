@@ -469,6 +469,27 @@ export function Settings({
                 />
               </label>
 
+              <label className="settings-row">
+                <span>
+                  Pages an agent may open
+                  <small>
+                    For agents with <b>Follow links</b> switched on (in each agent's properties): how many pages
+                    linked from their results they may open before answering. Each page is one more request to
+                    that agent's model, so an answer can cost up to {settings.linkLimit + 1}× as much.
+                  </small>
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  step={1}
+                  value={settings.linkLimit}
+                  onChange={(e) =>
+                    patch({ linkLimit: Math.min(10, Math.max(1, Math.round(Number(e.target.value)) || 1)) })
+                  }
+                />
+              </label>
+
               <p className="settings-note">
                 {getSearchProvider(settings.searchProvider)?.note}{" "}
                 <a

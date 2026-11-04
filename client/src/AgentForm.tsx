@@ -16,6 +16,7 @@ export interface AgentDraft {
   role: string;
   personality: string;
   webSearch: boolean;
+  followLinks: boolean;
 }
 
 export const EMPTY_DRAFT: AgentDraft = {
@@ -27,6 +28,7 @@ export const EMPTY_DRAFT: AgentDraft = {
   role: "generalist",
   personality: "",
   webSearch: false,
+  followLinks: false,
 };
 
 export function draftFromAgent(a: Agent): AgentDraft {
@@ -39,6 +41,7 @@ export function draftFromAgent(a: Agent): AgentDraft {
     role: a.role,
     personality: a.personality,
     webSearch: a.webSearch === true,
+    followLinks: a.followLinks === true,
   };
 }
 
@@ -53,10 +56,21 @@ interface Props {
    * available on providers that cannot search for themselves.
    */
   melonSearch?: boolean;
+  /** Pages an agent that follows links may open, from Settings, for the cost warning. */
+  linkLimit?: number;
   onRetryProviders?: () => void;
 }
 
-export function AgentForm({ draft, setDraft, providers, editingName, onSave, melonSearch, onRetryProviders }: Props) {
+export function AgentForm({
+  draft,
+  setDraft,
+  providers,
+  editingName,
+  onSave,
+  melonSearch,
+  linkLimit = 3,
+  onRetryProviders,
+}: Props) {
   const [test, setTest] = useState<{ state: "idle" | "running" | "done"; ok?: boolean; message?: string }>({
     state: "idle",
   });
@@ -376,6 +390,29 @@ export function AgentForm({ draft, setDraft, providers, editingName, onSave, mel
           </small>
         </span>
       </label>
+
+      {/*
+        Only where Melon does the searching: a provider that searches for
+        itself never shows Melon its results, so there are no links to offer.
+        The warning names the cost, because a vague one gets clicked past.
+      */}
+      {draft.webSearch && !searchBlocked && !searchesItself && !searchAutomatic && (
+        <label className="search-row follow-row">
+          <input
+            type="checkbox"
+            checked={draft.followLinks}
+            onChange={(e) => patch({ followLinks: e.target.checked })}
+          />
+          <span>
+            Follow links in search results
+            <small>
+              Before answering, this agent may open up to {linkLimit} page{linkLimit === 1 ? "" : "s"} linked from its
+              results. <b>Each page it opens is one more request to this model, so an answer can cost up to{" "}
+              {linkLimit + 1}× as much.</b> Free for local models. Change the page limit in Settings → Web search.
+            </small>
+          </span>
+        </label>
+      )}
 
       <label>
         Personality (optional)

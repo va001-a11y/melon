@@ -309,7 +309,7 @@ async function tavily(apiKey: string, query: string, max: number, signal?: Abort
  * the prompt. Dropping one any later would shift every number after it, and
  * the model's citations would point at the wrong sources.
  */
-function isWebUrl(url: string): boolean {
+export function isWebUrl(url: string): boolean {
   const u = url.trim().toLowerCase();
   return u.startsWith("http://") || u.startsWith("https://");
 }

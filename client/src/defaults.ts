@@ -56,6 +56,7 @@ export const DEFAULT_SETTINGS: Settings = {
   searchApiKeys: {},
   readFullPages: false,
   searchItems: 5,
+  linkLimit: 3,
 };
 
 /** Burn-rate slider bounds, in output tokens per minute. 0 = no limit. */

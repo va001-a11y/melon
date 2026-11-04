@@ -27,6 +27,12 @@ export interface AgentSpec {
   model: string;
   /** Let this agent search the web, where its provider supports it. */
   webSearch?: boolean;
+  /**
+   * Let this agent open pages linked from Melon's search results before it
+   * answers, up to RunSettings.linkLimit. Each choice is another request to
+   * its model, so it is off unless switched on. See followLinks.ts.
+   */
+  followLinks?: boolean;
   apiKey?: string;
   /** Custom base URL for OpenAI-compatible or Ollama endpoints. */
   baseUrl?: string;
@@ -58,6 +64,8 @@ export interface RunSettings {
   readFullPages?: boolean;
   /** Most items of a listed question searched separately, 1–25; see searchBudget. */
   searchItems?: number;
+  /** Most pages an agent with followLinks may open for one answer, 1–10. */
+  linkLimit?: number;
   /** Conversation mode: professional | sitcom | meme | research | consensus */
   mode: string;
   detailedCoT: boolean;

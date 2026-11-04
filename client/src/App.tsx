@@ -138,6 +138,7 @@ function normaliseAgent(raw: Record<string, unknown>): Agent | null {
     // here is silently dropped on reload — this has to stay in step with the
     // Agent type.
     webSearch: raw.webSearch === true,
+    followLinks: raw.followLinks === true,
     team: typeof raw.team === "number" && raw.team > 0 ? raw.team : 1,
   };
 }
@@ -324,6 +325,7 @@ export default function App() {
     delete (stored as { replyWidth?: unknown }).replyWidth;
     if (typeof stored.replyCardWidth !== "number" || !(stored.replyCardWidth >= 0)) stored.replyCardWidth = 0;
     stored.searchItems = Math.min(25, Math.max(1, Math.round(Number(stored.searchItems)) || 5));
+    stored.linkLimit = Math.min(10, Math.max(1, Math.round(Number(stored.linkLimit)) || 3));
     stored.searchApiKeys = withSearchKeys(stored.searchApiKeys, liveSecrets());
     return stored;
   });
@@ -730,6 +732,7 @@ export default function App() {
         },
         onAgentStart: (id, round) =>
           updateRun(at(round), id, (r) => ({ ...r, status: "streaming", startedAt: Date.now() })),
+        onReading: (id, opened, limit, round) => updateRun(at(round), id, (r) => ({ ...r, reading: { opened, limit } })),
         onToken: (id, chunk, round) => updateRun(at(round), id, (r) => ({ ...r, text: r.text + chunk })),
         onAgentDone: (id, usage, round, meta) =>
           updateRun(at(round), id, (r) => ({
@@ -1181,6 +1184,7 @@ export default function App() {
         <div className="drawer-backdrop" onClick={() => setSidebarOpen(false)} />
         <Sidebar
           melonSearch={Boolean(settings.searchProvider && (settings.searchApiKeys[settings.searchProvider] ?? "").trim())}
+          linkLimit={settings.linkLimit}
           agents={agents}
           setAgents={setAgents}
           providers={registry?.providers ?? []}

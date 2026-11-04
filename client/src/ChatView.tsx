@@ -357,13 +357,19 @@ function AgentCard({
    * beside a fast one, and was reported as the agents not running together
    * at all. They were; one simply had not started talking yet.
    */
-  const phase: "starting" | "preparing" | "thinking" | "writing" = !response.text
-    ? preparing
-      ? "preparing"
-      : "starting"
+  const phase: "starting" | "preparing" | "reading" | "thinking" | "writing" = !response.text
+    ? response.reading
+      ? "reading"
+      : preparing
+        ? "preparing"
+        : "starting"
     : answer
       ? "writing"
       : "thinking";
+  const phaseLabel =
+    phase === "reading" && response.reading
+      ? `reading pages ${response.reading.opened}/${response.reading.limit}`
+      : phase;
   const [copied, setCopied] = useState<"no" | "yes" | "failed">("no");
   const [noteDismissed, setNoteDismissed] = useState(false);
 
@@ -437,7 +443,10 @@ function AgentCard({
                 ? "A local model loads into memory and reads the prompt before it writes anything. " +
                   "The first request after a pause is the slowest, and a large model on a machine without a GPU " +
                   "can take minutes."
-                : phase === "starting"
+                : phase === "reading"
+                  ? "Following links: the agent is choosing pages from its results and reading them before it " +
+                    "answers. Each choice is a request to its model."
+                  : phase === "starting"
                   ? "The request has reached the provider and nothing has come back yet. Busy and free models " +
                     "are often queued before they begin, so a long wait here is usually the provider, not Melon."
                   : phase === "thinking"
@@ -446,7 +455,7 @@ function AgentCard({
           }
         >
           {response.status === "streaming" &&
-            (response.startedAt ? `${phase}… ${elapsedSeconds}s` : `${phase}…`)}
+            (response.startedAt ? `${phaseLabel}… ${elapsedSeconds}s` : `${phaseLabel}…`)}
           {response.status === "pending" &&
             (pacing ? "paused to slow spending" : waitingFor ? `waiting for ${waitingFor}` : "waiting")}
           {response.status === "stopped" && "⏹ stopped"}
