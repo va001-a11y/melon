@@ -62,11 +62,14 @@ test("the page limit is held between one and ten", () => {
 const realFetch = globalThis.fetch;
 let reads: string[] = [];
 let selections: string[] = [];
+/** The reply length each hidden choice asked for. */
+let selectionMax: number[] = [];
 let answers: string[] = [];
 let jinaFails = false;
 /** How the stand-in model chooses: by the label beside a link mentioning this word, then DONE. */
 let chooseFor = ["classes", "khonsu"];
 let replyInstead: string | null = null;
+let answerText = "Khonsu anomalies are kept in time [2].";
 
 const PAGES: Record<string, string> = {
   "https://scp.example/wiki/classes":
@@ -91,7 +94,7 @@ before(() => {
     if (href.startsWith("https://api.tavily.com/")) {
       return new Response(
         JSON.stringify({
-          results: [{ url: "https://scp.example/wiki/classes", title: "Esoteric classes in SCP", content: "Khonsu and others." }],
+          results: [{ url: "https://scp.example/wiki/classes", title: "Esoteric classes in SCP: Khonsu, Gevurah", content: "Khonsu and others." }],
         }),
         { status: 200 }
       );
@@ -107,6 +110,14 @@ before(() => {
       const system = String(body.messages?.[0]?.content ?? "");
       const user = String(body.messages?.[body.messages.length - 1]?.content ?? "");
       if (system === LINK_SELECT_SYSTEM) {
+        selectionMax.push(body.max_tokens);
+        // A provider that, like Groq's free tier, allows this model 1,000 output tokens.
+        if (body.model === "capped" && body.max_tokens > 1000) {
+          return new Response(
+            JSON.stringify({ error: { message: "on output tokens per minute (OTPM): Limit 1000, Requested 1024. Reduce max_tokens." } }),
+            { status: 429 }
+          );
+        }
         selections.push(user);
         if (replyInstead !== null) return sse(replyInstead);
         const want = chooseFor[selections.length - 1];
@@ -114,7 +125,7 @@ before(() => {
         return sse(line ? line.split(":")[0] : "DONE");
       }
       answers.push(body.messages.map((m: any) => String(m.content)).join("\n"));
-      return sse("Khonsu anomalies are kept in time [2].");
+      return sse(answerText);
     }
     return new Response("not found", { status: 404 });
   }) as typeof fetch;
@@ -125,20 +136,22 @@ after(() => {
 beforeEach(() => {
   reads = [];
   selections = [];
+  selectionMax = [];
   answers = [];
   jinaFails = false;
   chooseFor = ["classes", "khonsu"];
   replyInstead = null;
+  answerText = "Khonsu anomalies are kept in time [2].";
 });
 
-async function ask(followLinks: boolean, linkLimit = 3) {
+async function ask(followLinks: boolean, linkLimit = 3, model = "m") {
   const events: { type: string; data: any }[] = [];
   await runConversation(
     {
       userMessage: "What is Khonsu in SCP?",
       history: [],
       agents: [
-        { id: "a", name: "A", model: "m", provider: "groq", apiKey: "k", role: "researcher", webSearch: true, followLinks },
+        { id: "a", name: "A", model, provider: "groq", apiKey: "k", role: "researcher", webSearch: true, followLinks },
       ],
       settings: {
         mode: "professional",
@@ -220,4 +233,33 @@ test("the cost shown before sending includes the worst case of following links",
   // A provider that searches by itself never shows Melon its results, so there is nothing to follow.
   const native = estimateRun([agent("anthropic", true)], settings, 1000, 100);
   assert.equal(native.inputTokens, estimateRun([agent("anthropic", false)], settings, 1000, 100).inputTokens);
+});
+
+/* ---------- after the first live run (2026-11-04) ---------- */
+
+test("the card is told which sources were read in full, results included", async () => {
+  // An answer citing nothing keeps every source, so both opened pages show.
+  answerText = "No citations here.";
+  const events = await ask(true);
+  const done = events.find((e) => e.type === "agent-done");
+  assert.deepEqual(
+    done.data.citations.map((c: any) => [c.url, c.opened === true]),
+    [
+      ["https://scp.example/wiki/classes", true],
+      ["https://scp.example/wiki/khonsu", true],
+    ]
+  );
+});
+
+test("choosing pages has room to think, and a provider's lower limit is respected", async () => {
+  await ask(true);
+  assert.equal(selectionMax[0], 1024, "300 left a reasoning model no room to write its choice");
+  selectionMax = [];
+  selections = [];
+  await ask(true, 3, "capped");
+  assert.deepEqual(
+    selectionMax,
+    [1024, 1000, 1000, 1000],
+    "refused once, then asked at the provider's limit from the start for the rest of the run"
+  );
 });

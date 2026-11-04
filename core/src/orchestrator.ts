@@ -555,17 +555,30 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
   /**
    * A short request to an agent's model that the user never sees: planning a
    * search, choosing pages. On the agent's own key, counted against the
-   * session budget like any reply, and given thirty seconds — a slow helper
-   * must not hold up the answer it is meant to improve.
+   * session budget like any reply, and given a minute at most — a slow
+   * helper must not hold up the answer it is meant to improve.
+   *
+   * Room for 1,024 tokens. It was 300, and a model that reasons before
+   * answering could spend all of them thinking and never write its choice;
+   * the reading then ended without a word. It is a ceiling, not a cost: a
+   * model that replies "L2" pays for "L2". A provider allowing less is asked
+   * again at its own limit, as a reply would be.
    */
+  const QUIET_REPLY_TOKENS = 1024;
+  /**
+   * A reply-length limit a provider has stated for an agent, kept for the
+   * rest of the run. Without it, every hidden request and then the reply
+   * itself would each be refused once before being asked again at the limit.
+   */
+  const learnedLimit = new Map<string, number>();
   const askQuietly = async (agent: AgentSpec, system: string, prompt: string, slowMessage: string): Promise<string> => {
     const target = resolveTarget(agent);
     const limit = new AbortController();
-    const timer = setTimeout(() => limit.abort(new Error(slowMessage)), 30_000);
+    const timer = setTimeout(() => limit.abort(new Error(slowMessage)), 60_000);
     const stop = () => limit.abort(controller.signal.reason);
     controller.signal.addEventListener("abort", stop, { once: true });
-    try {
-      const result = await target.adapter.chat({
+    const call = (maxOutputTokens: number) =>
+      target.adapter.chat({
         model: agent.model,
         apiKey: agent.apiKey,
         baseUrl: target.baseUrl,
@@ -575,10 +588,21 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
         detailedCoT: false,
         system,
         messages: [{ role: "user", content: prompt }],
-        maxOutputTokens: 300,
+        maxOutputTokens,
         signal: limit.signal,
         handlers: { onToken: () => {} },
       });
+    try {
+      const ceiling = Math.min(QUIET_REPLY_TOKENS, learnedLimit.get(agent.id) ?? Number.POSITIVE_INFINITY);
+      let result: Awaited<ReturnType<typeof call>>;
+      try {
+        result = await call(ceiling);
+      } catch (first) {
+        const allowed = outputLimitFrom(first, ceiling);
+        if (!allowed) throw first;
+        learnedLimit.set(agent.id, allowed);
+        result = await call(allowed);
+      }
       tokenGuard.addUsage(
         result.usage.outputTokens > 0
           ? result.usage
@@ -623,7 +647,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
     material: string,
     citations: Citation[],
     readInFull: Set<string>
-  ): Promise<{ block: string; added: Citation[] }> => {
+  ): Promise<{ block: string; added: Citation[]; openedNumbers: Set<number> }> => {
     const numbered = new Map(citations.map((c, i) => [samePage(c.url), i + 1]));
     const opened: { n: number; page: ReadPage }[] = [];
     const added: Citation[] = [];
@@ -669,7 +693,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
         if (!n) {
           n = citations.length + added.length + 1;
           numbered.set(key, n);
-          added.push({ url: page.url, title: titled.title, n });
+          added.push({ url: page.url, title: titled.title, n, opened: true });
         }
         opened.push({ n, page: titled });
         pool = pool.concat(page.links);
@@ -677,7 +701,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
       sink.send("reading", { agentId: agent.id, round, opened: opened.length, limit: linkLimit });
       if (!readAny) break;
     }
-    return { block: formatOpenedPages(opened), added };
+    return { block: formatOpenedPages(opened), added, openedNumbers: new Set(opened.map((o) => o.n)) };
   };
 
   /** Everyone who has spoken in this chat or is speaking now, by any name the history used. */
@@ -800,12 +824,16 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
                 shared.readInFull
               ).catch((err: unknown) => {
                 if (controller.signal.aborted) throw err;
-                return { block: "", added: [] as Citation[] };
+                return { block: "", added: [] as Citation[], openedNumbers: new Set<number>() };
               });
               if (followed.block) {
                 // New arrays: the shared search belongs to every agent in the run.
+                // A result the agent opened is marked, so the card can say what was read.
                 searchContext = `${searchContext}\n\n${followed.block}`;
-                searchCitations = [...searchCitations, ...followed.added];
+                searchCitations = [
+                  ...searchCitations.map((c, i) => (followed.openedNumbers.has(i + 1) ? { ...c, opened: true } : c)),
+                  ...followed.added,
+                ];
               }
             }
           }
@@ -898,17 +926,19 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
        * once more at that limit, and the card says it was shortened. Only
        * when nothing has streamed: a retry after that would repeat text.
        */
-      let cappedTo: number | undefined;
+      // Already learned from a hidden request this run: start at the limit.
+      const known = learnedLimit.get(agent.id);
+      let cappedTo: number | undefined = known !== undefined && known < req.settings.maxOutputTokens ? known : undefined;
       try {
         try {
-          result = await callModel(req.settings.maxOutputTokens);
+          result = await callModel(cappedTo ?? req.settings.maxOutputTokens);
         } catch (first) {
+          const asked = cappedTo ?? req.settings.maxOutputTokens;
           const limit =
-            streamedChars === 0 && !stalled && !controller.signal.aborted
-              ? outputLimitFrom(first, req.settings.maxOutputTokens)
-              : null;
+            streamedChars === 0 && !stalled && !controller.signal.aborted ? outputLimitFrom(first, asked) : null;
           if (!limit) throw first;
           cappedTo = limit;
+          learnedLimit.set(agent.id, limit);
           poke();
           result = await callModel(limit);
         }

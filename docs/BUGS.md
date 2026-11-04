@@ -1327,6 +1327,33 @@ search's five had, so the context does not grow.
 The built-in demo model never plans: it has no real answers, and an old
 test showed its canned reply being searched for as though it were queries.
 
+### "Likely fanon confusion" (2026-11-04)
+
+Asked the SCP question again with searches split per item, Qwen found
+three of the five names and said the other two were "likely fanon
+confusion". They were real; the search had missed them. The results were
+weak, and saying so was right — concluding the names were not real was
+not. The search instructions now say that results not covering something
+mean it was not found, never that it is false, made up, unofficial or
+non-existent.
+
+The same run showed why the search missed them. The free check counted a
+name as found if it appeared anywhere in the results, and "Gevurah"
+appeared in passing on a page about something else — so no better query
+was tried. A name now counts as found only if a result is about it: named
+in its title or address.
+
+Two more from that run. A hidden request — planning a search, choosing
+pages — had 300 tokens, which a model that reasons first can spend before
+writing its choice; it now has 1,024, a ceiling rather than a cost, and a
+provider's lower limit is learned once and kept for the run. And a reply
+that wrote nothing still said "8 sources" under it; it now says those were
+pages it was given, none cited, and marks the ones read in full.
+
+**The page that defined both names was in no result at all.** Link
+following cannot reach a page no result leads to; only a better search
+can. Which search engine is used matters as much as anything here.
+
 ### "Rate limit" for a reply no wait would allow (2026-11-02)
 
 Qwen on Groq failed with "Rate limit or quota exceeded". Groq's tier allows

@@ -3158,3 +3158,13 @@ body {
   color: var(--danger);
   font-size: 12px;
 }
+
+/* A source the agent opened and read, rather than saw as a snippet. */
+.source-read {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 10.5px;
+  background: var(--accent-soft);
+  color: var(--text-dim);
+}

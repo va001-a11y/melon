@@ -165,6 +165,8 @@ export interface Citation {
    * written and lists those two, numbered 4 and 5.
    */
   n?: number;
+  /** Read in full by the agent following links, rather than seen as a search snippet. */
+  opened?: boolean;
 }
 
 export interface ProviderResult {

@@ -111,12 +111,12 @@ const PAGES: Record<string, string> = {
 
 function searchResults(query: string) {
   // One search for everything returns only the best-known names, as Tavily did.
-  if (query.includes("/")) return ["Tiamat", "Argus"].map((n) => ({ url: `https://wiki.example/${n}`, title: n, content: PAGES[n] }));
+  if (query.includes("/")) return ["Tiamat", "Argus"].map((n) => ({ url: `https://wiki.example/${n}`, title: `${n} - SCP wiki`, content: PAGES[n] }));
   // A query for the company's founder finds only pages that never name it.
   if (/who founded/i.test(query)) return [{ url: "https://news.example/founders", title: "Founders", content: "Famous founders." }];
   return Object.keys(PAGES)
     .filter((n) => query.includes(n))
-    .map((n) => ({ url: `https://wiki.example/${n}`, title: n, content: PAGES[n] }));
+    .map((n) => ({ url: `https://wiki.example/${n}`, title: `${n} - SCP wiki`, content: PAGES[n] }));
 }
 
 function sse(text: string) {
@@ -273,4 +273,19 @@ test("set to one item, a list is searched whole, as before splitting existed", a
   const events = await ask(SCP, "m", 512, { searchItems: 1 });
   assert.deepEqual(searches.slice(0, 1), [SCP]);
   assert.equal(events.find((e) => e.type === "agent-done")?.data.coverage, undefined);
+});
+
+/* ---------- after the first live run (2026-11-04) ---------- */
+
+test("a name mentioned in passing is not found: a result must be about it", () => {
+  const passing = [{ url: "https://fanon.example/list", title: "List of classes", snippet: "Gevurah appears as an error message." }];
+  assert.deepEqual(missingTerms(["Gevurah"], passing), ["Gevurah"]);
+  assert.deepEqual(missingTerms(["Gevurah"], [{ url: "https://w.example/Gevurah", title: "Classes", snippet: "" }]), []);
+  assert.deepEqual(missingTerms(["Gevurah"], [{ url: "https://w.example/x", title: "Gevurah - SCP wiki", snippet: "" }]), []);
+});
+
+test("the model is told that missing from the results is not evidence of anything", () => {
+  const block = formatSearchContext("q", [{ url: "https://e.com/", title: "t", snippet: "s" }]);
+  assert.match(block, /never conclude/i);
+  assert.match(block, /does not exist/);
 });

@@ -12,9 +12,9 @@
  *   1. A list in the question ("A / B / C", "A, B and C") is split into one
  *      query per item, each carrying the question's context. Free.
  *   2. Otherwise the question is searched as before. Free.
- *   3. If a name the question asks about appears nowhere in the results, a
- *      model is asked for queries aimed at what is missing, and those are
- *      searched too. Only then is a model called.
+ *   3. If no result is about a name the question asks about — none has it
+ *      in its title or address — a model is asked for queries aimed at what
+ *      is missing, and those are searched too. Only then is a model called.
  */
 
 /** Words that are never the subject of a search. */
@@ -116,10 +116,25 @@ export function keyTerms(question: string): string[] {
   return [...terms];
 }
 
-/** Terms that appear nowhere in the results: not in a title, a snippet or an address. */
-export function missingTerms(terms: string[], hits: { url: string; title: string; snippet: string }[]): string[] {
-  const haystack = hits.map((h) => `${h.title}\n${h.snippet}\n${h.url}`).join("\n").toLowerCase();
-  return terms.filter((term) => !haystack.includes(term.toLowerCase()));
+/**
+ * Terms no result is about: in no result's title or address.
+ *
+ * Snippets are not counted. "Gevurah" turned up in one as a passing mention
+ * on a page about something else, so the search looked complete, no better
+ * query was tried, and the agent had nothing real to go on. A page actually
+ * about a thing almost always names it in its title or its address.
+ */
+export function missingTerms(terms: string[], hits: { url: string; title: string; snippet?: string }[]): string[] {
+  const about = hits.map((h) => `${h.title}\n${decodeSafe(h.url)}`).join("\n").toLowerCase();
+  return terms.filter((term) => !about.includes(term.toLowerCase()));
+}
+
+function decodeSafe(url: string): string {
+  try {
+    return decodeURIComponent(url);
+  } catch {
+    return url;
+  }
 }
 
 export const PLANNER_SYSTEM =

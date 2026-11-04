@@ -574,7 +574,17 @@ function AgentCard({
       {response.citations && response.citations.length > 0 && (
         <details className="sources">
           <summary>
-            🔗 {response.citations.length} source{response.citations.length === 1 ? "" : "s"}
+            {/*
+              With no answer, nothing was sourced from these: they are what the
+              agent was given. "8 sources" on an empty reply read as if it had
+              cited eight pages.
+            */}
+            🔗 {response.citations.length}{" "}
+            {answer
+              ? `source${response.citations.length === 1 ? "" : "s"}`
+              : `page${response.citations.length === 1 ? "" : "s"} it was given, none cited`}
+            {response.citations.some((c) => c.opened) &&
+              ` · ${response.citations.filter((c) => c.opened).length} read in full`}
           </summary>
           <ol>
             {response.citations.map((c) => (
@@ -588,6 +598,11 @@ function AgentCard({
                   <span title={c.url}>{c.title || c.url}</span>
                 )}
                 <span className="source-host">{c.title ? hostOf(c.url) : ""}</span>
+                {c.opened && (
+                  <span className="source-read" title="Opened and read in full by this agent, not just seen as a snippet">
+                    read in full
+                  </span>
+                )}
               </li>
             ))}
           </ol>
