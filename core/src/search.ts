@@ -1,3 +1,5 @@
+import { excerptFor, plainText } from "./excerpt.js";
+
 /**
  * Melon-side web search.
  *
@@ -696,7 +698,9 @@ export function formatSearchContext(
   /** Snippet room, from searchBudget. */
   textChars: number = DEFAULT_TEXT_CHARS,
   /** Items of a listed question past the limit, which were not searched. */
-  notSearched: string[] = []
+  notSearched: string[] = [],
+  /** The names the question asks about, to excerpt pages read in full around. */
+  terms: string[] = []
 ): string {
   const queries = (Array.isArray(query) ? query : [query]).map((q) => `"${q}"`).join(", ");
   /*
@@ -730,7 +734,11 @@ export function formatSearchContext(
   const body = hits
     .map((h, i) => {
       const asPage = h.fullPage && pagesLeft-- > 0;
-      const text = clampSnippet(h.snippet, asPage ? MAX_PAGE_CHARS : Math.max(400, snippetChars));
+      // A page read in full is excerpted around what was asked, as plain text:
+      // its first characters are, on many sites, a menu. See excerpt.ts.
+      const text = asPage
+        ? excerptFor(plainText(h.snippet), terms, MAX_PAGE_CHARS)
+        : clampSnippet(h.snippet, Math.max(400, snippetChars));
       return `[${i + 1}] ${h.title || h.url}\n${h.url}\n${text}`;
     })
     .join("\n\n");

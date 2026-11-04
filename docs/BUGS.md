@@ -1369,6 +1369,30 @@ The same run produced a wrong definition of Tiamat, generalised from a
 single Tiamat-class article. The search instructions now say that a source
 which only uses a term does not define it.
 
+### Pages read in full were mostly menus (2026-11-04)
+
+With link-following finally reaching the run, agents opened pages and still
+answered wrongly. Reading SCP-3895 through Jina showed why: on the SCP wiki
+a page's text begins with the whole site navigation, and the article —
+"Item #: SCP-3895 / Anomaly Class: Tiamat" — starts at character 6,200.
+Pages were cut to their first 3,000. The model was given menus, a rating
+widget and half a sentence of a notice, and filled the rest in. "Read full
+pages" had the same cut, and also passed every link address along.
+
+A page is now excerpted around the names the question asks about: the
+paragraph each appears in and what follows it, every name before any gets
+a second passage, its first mention after the menus first, and a name on
+nearly every line — "SCP" on that wiki — spending no room once rarer ones
+are found. A page naming none of them is read from its first real
+paragraph. Same room, as plain text. On the real SCP-3895, the excerpt for
+the user's question now holds the article's class block and the page's own
+footnote defining the Tiamat class — the definition the agents had been
+guessing at.
+
+**"Read in full" meant the first 3,000 characters, which on a wiki is the
+part nobody reads.** Checking the actual page took one request; every
+earlier theory here was argued from screenshots.
+
 **The page that defined both names was in no result at all.** Link
 following cannot reach a page no result leads to; only a better search
 can. Which search engine is used matters as much as anything here.

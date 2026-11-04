@@ -526,7 +526,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
     // a relay of five agents reads each page once, not five times.
     if (req.settings.readFullPages) hits = await readFullPages(hits, controller.signal);
     return {
-      context: formatSearchContext(queries, hits, budget.textChars, notSearched),
+      context: formatSearchContext(queries, hits, budget.textChars, notSearched, askedNames),
       citations: hits.map((h) => ({ url: h.url, title: h.title || undefined })),
       coverage: notSearched.length
         ? { searched: listed.length, of: listedAll.length, limitedBy: budget.limitedBy }
@@ -627,6 +627,9 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
     return read;
   };
 
+  /** The names the question asks about, which pages are excerpted around. */
+  const askedNames = keyTerms(req.userMessage);
+
   /** Words worth ranking links by: the question's names, and its longer words. */
   const linkTerms = [
     ...new Set([...keyTerms(req.userMessage), ...(req.userMessage.toLowerCase().match(/\p{L}{5,}/gu) ?? [])]),
@@ -670,7 +673,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
         reply = await askQuietly(
           agent,
           LINK_SELECT_SYSTEM,
-          selectionPrompt(req.userMessage, `${material}\n\n${formatOpenedPages(opened)}`.trim(), candidates, remaining),
+          selectionPrompt(req.userMessage, `${material}\n\n${formatOpenedPages(opened, askedNames)}`.trim(), candidates, remaining),
           "Choosing pages took too long."
         );
       } catch (err) {
@@ -701,7 +704,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
       sink.send("reading", { agentId: agent.id, round, opened: opened.length, limit: linkLimit });
       if (!readAny) break;
     }
-    return { block: formatOpenedPages(opened), added, openedNumbers: new Set(opened.map((o) => o.n)) };
+    return { block: formatOpenedPages(opened, askedNames), added, openedNumbers: new Set(opened.map((o) => o.n)) };
   };
 
   /** Everyone who has spoken in this chat or is speaking now, by any name the history used. */
