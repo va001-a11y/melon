@@ -70,6 +70,8 @@ export interface Settings {
   searchApiKeys: Record<string, string>;
   /** Read the top results in full through Jina Reader. Off by default: slower, and uses more context. */
   readFullPages: boolean;
+  /** Most items of a listed question searched separately, 1–25. */
+  searchItems: number;
   /** Pipeline team names and briefs, keyed by team number. */
   teamNames?: Record<string, string>;
   teamBriefs?: Record<string, string>;
@@ -214,6 +216,8 @@ export interface AgentResponse {
    * the provider's own limit: what was asked, what was allowed, and by whom.
    */
   capped?: { to: number; from: number; by: string };
+  /** A listed question had more items than were searched: how many were, and why not more. */
+  coverage?: { searched: number; of: number; limitedBy: "setting" | "room" };
   /** Pages the model consulted, when web search was on. */
   citations?: Citation[];
   /** Whether web search was requested for this agent on this run. */

@@ -323,6 +323,7 @@ export default function App() {
     // The three named widths that came before dragging; never released.
     delete (stored as { replyWidth?: unknown }).replyWidth;
     if (typeof stored.replyCardWidth !== "number" || !(stored.replyCardWidth >= 0)) stored.replyCardWidth = 0;
+    stored.searchItems = Math.min(25, Math.max(1, Math.round(Number(stored.searchItems)) || 5));
     stored.searchApiKeys = withSearchKeys(stored.searchApiKeys, liveSecrets());
     return stored;
   });
@@ -740,6 +741,7 @@ export default function App() {
             citations: meta?.citations,
             searched: meta?.searched,
             capped: meta?.capped,
+            coverage: meta?.coverage,
           })),
         onAgentError: (id, message, round) =>
           updateRun(at(round), id, (r) => ({ ...r, status: "error", error: message })),
@@ -848,6 +850,7 @@ export default function App() {
               citations: meta?.citations,
               searched: meta?.searched,
               capped: meta?.capped,
+              coverage: meta?.coverage,
             })),
           onAgentError: (id, message) => updateRun(blockId, id, (r) => ({ ...r, status: "error", error: message })),
           onAgentStopped: (id) => updateRun(blockId, id, (r) => ({ ...r, status: "stopped" })),

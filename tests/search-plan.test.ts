@@ -17,7 +17,7 @@ import {
   PLANNER_SYSTEM,
   splitListQuery,
 } from "../core/src/searchPlan.ts";
-import { formatSearchContext } from "../core/src/search.ts";
+import { formatSearchContext, searchBudget, searchReserveTokens, MAX_SEARCH_BLOCK_TOKENS } from "../core/src/search.ts";
 import { outputLimitFrom } from "../core/src/providers/sse.ts";
 import { runConversation } from "../core/src/index.ts";
 
@@ -161,7 +161,7 @@ beforeEach(() => {
   modelCalls = [];
 });
 
-async function ask(question: string, model = "m", maxOutputTokens = 512) {
+async function ask(question: string, model = "m", maxOutputTokens = 512, extra: Record<string, unknown> = {}) {
   const events: { type: string; data: any }[] = [];
   await runConversation(
     {
@@ -175,6 +175,7 @@ async function ask(question: string, model = "m", maxOutputTokens = 512) {
         sessionOutputBudget: 0,
         searchProvider: "tavily",
         searchApiKey: "test-search-key",
+        ...extra,
       },
     } as Parameters<typeof runConversation>[0],
     { send: (type: string, data: unknown) => events.push({ type, data }), end() {}, onClose() {} } as any
@@ -214,4 +215,62 @@ test("a refused reply length is asked again at the provider's limit, and the car
   const done = events.find((e) => e.type === "agent-done");
   assert.deepEqual(done?.data.capped, { to: 1000, from: 1351, by: "Groq (very fast)" });
   assert.equal(done?.data.replyLimit, 1000);
+});
+
+/* ---------- how many items a list may search (v0.8.0) ---------- */
+
+test("the room for results scales with the smallest model, and decides how many items fit", () => {
+  const small = searchBudget(8_192, 25);
+  assert.equal(small.textChars, 7500, "an 8k model keeps the old room");
+  assert.equal(small.items, 12, "which fits twelve useful snippets, not twenty-five");
+  assert.equal(small.limitedBy, "room");
+
+  const large = searchBudget(128_000, 25);
+  assert.deepEqual([large.items, large.maxHits, large.textChars, large.limitedBy], [25, 25, 37_500, "setting"]);
+
+  assert.deepEqual([searchBudget(128_000).items, searchBudget(128_000).limitedBy], [5, "setting"], "five unless asked");
+  assert.equal(searchBudget(128_000, 999).items, 25, "never past 25");
+  assert.equal(searchBudget(128_000, Number.NaN).items, 5);
+});
+
+test("the context guard reserves what the budget may use, and no less than before", () => {
+  assert.equal(searchReserveTokens("tavily", false, searchBudget(8_192)), MAX_SEARCH_BLOCK_TOKENS);
+  assert.ok(searchReserveTokens("tavily", false, searchBudget(128_000, 25)) > 37_500 / 4);
+});
+
+test("a snippet never grows past 1,500 characters, whatever the room", () => {
+  const hits = [1, 2].map((i) => ({ url: `https://e.com/${i}`, title: `t${i}`, snippet: "x".repeat(9000) }));
+  const block = formatSearchContext("q", hits, 37_500);
+  assert.ok(block.length < 2 * 1500 + 1000, `two results took ${block.length} characters`);
+});
+
+test("items past the limit are named for the model, not silently dropped", () => {
+  const names = Array.from({ length: 40 }, (_, i) => `Item${i + 1}`);
+  const block = formatSearchContext(names.slice(0, 5), [], 7500, names.slice(5));
+  assert.match(block, /NOT SEARCHED/);
+  assert.match(block, /"Item6"/);
+  assert.match(block, /and 5 more/, "thirty named, the rest counted");
+});
+
+const forty = `what are ${Array.from({ length: 40 }, (_, i) => `Zed${i + 1}`).join(" / ")} in Testverse?`;
+
+test("a forty-item list searches five by default, tells the model and the card, and calls no model to plan", async () => {
+  const events = await ask(forty);
+  assert.equal(searches.length, 5);
+  assert.equal(plannerCalls(), 0, "a planner could not cover thirty-five more, so it is not paid for");
+  assert.match(prompts(), /NOT SEARCHED/);
+  const done = events.find((e) => e.type === "agent-done");
+  assert.deepEqual(done?.data.coverage, { searched: 5, of: 40, limitedBy: "setting" });
+});
+
+test("with the setting at 25 and room for it, twenty-five are searched", async () => {
+  const events = await ask(forty, "m", 512, { searchItems: 25 });
+  assert.equal(searches.length, 25);
+  assert.deepEqual(events.find((e) => e.type === "agent-done")?.data.coverage, { searched: 25, of: 40, limitedBy: "setting" });
+});
+
+test("set to one item, a list is searched whole, as before splitting existed", async () => {
+  const events = await ask(SCP, "m", 512, { searchItems: 1 });
+  assert.deepEqual(searches.slice(0, 1), [SCP]);
+  assert.equal(events.find((e) => e.type === "agent-done")?.data.coverage, undefined);
 });

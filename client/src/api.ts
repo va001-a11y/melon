@@ -29,6 +29,7 @@ export interface RunCallbacks {
       citations?: Citation[];
       searched?: boolean;
       capped?: { to: number; from: number; by: string };
+      coverage?: { searched: number; of: number; limitedBy: "setting" | "room" };
     }
   ) => void;
   onAgentError: (agentId: string, message: string, round?: number) => void;
@@ -359,6 +360,7 @@ function dispatch(event: string, data: any, callbacks: RunCallbacks): boolean {
           citations: data.citations,
           searched: data.searched,
           capped: data.capped,
+          coverage: data.coverage,
         });
         break;
       case "agent-error":

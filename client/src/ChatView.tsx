@@ -559,8 +559,11 @@ function AgentCard({
         </div>
       )}
 
+      {/* Collapsed until asked for: the count says what is there, and a reply
+          that searched several items, or followed links, can cite a long list
+          that would otherwise push the next reply off the screen. */}
       {response.citations && response.citations.length > 0 && (
-        <details className="sources" open={response.citations.length <= 8}>
+        <details className="sources">
           <summary>
             🔗 {response.citations.length} source{response.citations.length === 1 ? "" : "s"}
           </summary>
@@ -591,6 +594,27 @@ function AgentCard({
         sentence that was never started, and "ask it to continue" points at a
         button that has nothing to continue from.
       */}
+      {/* A listed question with more items than were searched: said, not silently dropped. */}
+      {response.status === "done" && response.coverage && (
+        <div className="cutoff-note">
+          <b>
+            Searched {response.coverage.searched} of the {response.coverage.of} items in the question.
+          </b>{" "}
+          The other {response.coverage.of - response.coverage.searched} were not looked up, and this reply should
+          say it has no sources for them.{" "}
+          {response.coverage.limitedBy === "setting" ? (
+            <>
+              Raise <b>Settings → Web search → Items searched per question</b> to search more (up to 25; each is
+              one search from your quota).
+            </>
+          ) : (
+            <>
+              The smallest model in this run has no room for more results. Leave it out of the run, or ask about
+              fewer items at a time.
+            </>
+          )}
+        </div>
+      )}
       {/* The provider refused the Reply length, so Melon asked again at its limit. */}
       {response.status === "done" && response.capped && (
         <div className="cutoff-note">

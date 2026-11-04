@@ -55,6 +55,7 @@ export const DEFAULT_SETTINGS: Settings = {
   searchProvider: "",
   searchApiKeys: {},
   readFullPages: false,
+  searchItems: 5,
 };
 
 /** Burn-rate slider bounds, in output tokens per minute. 0 = no limit. */

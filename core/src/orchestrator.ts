@@ -29,7 +29,7 @@ import {
   pruneUnusedSources,
   runWebSearch,
   searchQueryFor,
-  MAX_PLANNED_HITS,
+  searchBudget,
   trimQuery,
   worthSearching,
 } from "./search.js";
@@ -299,8 +299,9 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
     req.agents.some(
       (a) => a.webSearch === true && webSearchBlockReason(getProvider(a.provider), a.model) !== null
     );
+  const budget = searchBudget(smallest, req.settings.searchItems);
   const searchReserve = melonSearchPossible
-    ? searchReserveTokens(req.settings.searchProvider, req.settings.readFullPages === true)
+    ? searchReserveTokens(req.settings.searchProvider, req.settings.readFullPages === true, budget)
     : 0;
   const usableWindow = Math.max(1000, smallest - req.settings.maxOutputTokens - 800 - searchReserve);
   const startingContext = contextTokens(req.history, req.userMessage, req.attachments ?? []);
@@ -426,7 +427,9 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
    * is shared too: if the search API is down or out of quota, retrying it
    * once per agent would spend more quota to fail the same way.
    */
-  let sharedSearch: Promise<{ context: string; citations: Citation[] }> | null = null;
+  /** Set when a listed question had more items than were searched, for the card to say so. */
+  type Coverage = { searched: number; of: number; limitedBy: "setting" | "room" };
+  let sharedSearch: Promise<{ context: string; citations: Citation[]; coverage?: Coverage }> | null = null;
   const searchOnce = (engineId: string, apiKey: string, planner: AgentSpec) => {
     if (!sharedSearch) sharedSearch = plannedSearch(engineId, apiKey, planner);
     return sharedSearch;
@@ -441,8 +444,9 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
           apiKey,
           query,
           signal: controller.signal,
-          // One search keeps its five; several share the larger total.
-          maxResults: queries.length === 1 ? 5 : 3,
+          // One search keeps its five; several share the larger total, and a
+          // long list takes each item's best result rather than its three.
+          maxResults: queries.length === 1 ? 5 : queries.length <= 8 ? 3 : queries.length <= 15 ? 2 : 1,
         })
       )
     );
@@ -459,12 +463,17 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
    * the user's time and money.
    */
   const plannedSearch = async (engineId: string, apiKey: string, planner: AgentSpec) => {
-    const listed = splitListQuery(req.userMessage);
+    // A limit of one item means "do not split": the question is searched whole.
+    const listedAll = budget.items >= 2 ? splitListQuery(req.userMessage, Number.POSITIVE_INFINITY) : [];
+    const listed = listedAll.slice(0, budget.items);
+    const notSearched = listedAll.slice(budget.items);
     const queries = listed.length ? listed : [searchQueryFor(req.history, req.userMessage)];
     const first = await searchAll(engineId, apiKey, queries);
-    let hits = interleaveHits(first, queries.length === 1 ? 5 : MAX_PLANNED_HITS);
+    let hits = interleaveHits(first, queries.length === 1 ? 5 : budget.maxHits);
 
-    const missing = missingTerms(keyTerms(req.userMessage), hits);
+    // Past the limit, a model asked for better queries could cover a few more
+    // items at most, so it is not asked: the card says what was left instead.
+    const missing = notSearched.length ? [] : missingTerms(keyTerms(req.userMessage), hits);
     // The demo model has no real answers to give, so it cannot write queries
     // either; asking it would only spend search quota on its canned text.
     if (missing.length > 0 && planner.provider !== "demo") {
@@ -473,7 +482,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
       if (extra.length > 0) {
         const more = await searchAll(engineId, apiKey, extra).catch(() => [] as SearchHit[][]);
         if (more.length > 0) {
-          hits = interleaveHits([hits, ...more], MAX_PLANNED_HITS);
+          hits = interleaveHits([hits, ...more], budget.maxHits);
           queries.push(...extra);
         }
       }
@@ -483,8 +492,11 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
     // a relay of five agents reads each page once, not five times.
     if (req.settings.readFullPages) hits = await readFullPages(hits, controller.signal);
     return {
-      context: formatSearchContext(queries, hits),
+      context: formatSearchContext(queries, hits, budget.textChars, notSearched),
       citations: hits.map((h) => ({ url: h.url, title: h.title || undefined })),
+      coverage: notSearched.length
+        ? { searched: listed.length, of: listedAll.length, limitedBy: budget.limitedBy }
+        : undefined,
     };
   };
 
@@ -600,6 +612,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
        */
       let searchContext = "";
       let searchCitations: Citation[] | undefined;
+      let searchCoverage: Coverage | undefined;
       /*
        * Whether a search actually ran, which is not the same as whether the
        * user asked for one. The card words its warning differently for "the
@@ -637,6 +650,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
             const shared = await searchOnce(engine.id, searchKey, agent);
             searchContext = shared.context;
             searchCitations = shared.citations;
+            searchCoverage = shared.coverage;
             didSearch = true;
           }
         }
@@ -814,6 +828,8 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
         replyLimit: cappedTo ?? req.settings.maxOutputTokens,
         // Shortened to fit the provider's limit: what was asked, what was allowed, and by whom.
         capped: cappedTo ? { to: cappedTo, from: req.settings.maxOutputTokens, by: target.label } : undefined,
+        // A listed question with more items than were searched.
+        coverage: searchCoverage,
         // Pages the model consulted, when it searched. Without these the
         // search is invisible: the answer is better but unverifiable.
         citations,

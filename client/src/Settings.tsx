@@ -447,6 +447,28 @@ export function Settings({
                 </label>
               )}
 
+              <label className="settings-row">
+                <span>
+                  Items searched per question
+                  <small>
+                    A question that lists several things — "what are A / B / C?" — gets one search per item, up to
+                    this many. Each item uses one search from your{" "}
+                    {getSearchProvider(settings.searchProvider)?.label ?? "search"} quota. Items past the limit
+                    are not looked up, and the reply says which.
+                  </small>
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={25}
+                  step={1}
+                  value={settings.searchItems}
+                  onChange={(e) =>
+                    patch({ searchItems: Math.min(25, Math.max(1, Math.round(Number(e.target.value)) || 1)) })
+                  }
+                />
+              </label>
+
               <p className="settings-note">
                 {getSearchProvider(settings.searchProvider)?.note}{" "}
                 <a

@@ -56,6 +56,8 @@ export interface RunSettings {
    * instead of relying on the engine's one-line snippets.
    */
   readFullPages?: boolean;
+  /** Most items of a listed question searched separately, 1–25; see searchBudget. */
+  searchItems?: number;
   /** Conversation mode: professional | sitcom | meme | research | consensus */
   mode: string;
   detailedCoT: boolean;
