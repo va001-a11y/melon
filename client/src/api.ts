@@ -1,5 +1,5 @@
 import { RUNS_LOCALLY } from "./target";
-import { toRunAgent } from "./wire";
+import { toRunAgent, toRunSettings } from "./wire";
 import type { Agent, AnalyticsSnapshot, Attachment, Bundle, Citation, GuardState, RegistryInfo, Settings, Usage } from "./types";
 
 /**
@@ -258,8 +258,7 @@ export async function runConversation(
    * business leaving the page -- not to Melon's server, and certainly not to
    * a different search company.
    */
-  const { searchApiKeys, ...rest } = settings;
-  const wireSettings = { ...rest, searchApiKey: searchApiKeys?.[settings.searchProvider] ?? "" };
+  const wireSettings = toRunSettings(settings);
   const body = {
     userMessage,
     history,

@@ -579,6 +579,7 @@ function AgentCard({
               agent was given. "8 sources" on an empty reply read as if it had
               cited eight pages.
             */}
+            <span className="sources-caret" aria-hidden="true">▸</span>
             🔗 {response.citations.length}{" "}
             {answer
               ? `source${response.citations.length === 1 ? "" : "s"}`
@@ -626,10 +627,12 @@ function AgentCard({
           </b>{" "}
           The other {response.coverage.of - response.coverage.searched} were not looked up, and this reply should
           say it has no sources for them.{" "}
-          {response.coverage.limitedBy === "setting" ? (
+          {response.coverage.limitedBy === "setting" && response.coverage.searched >= 25 ? (
+            <>25 is the most Melon searches for one question; ask about the rest in a follow-up.</>
+          ) : response.coverage.limitedBy === "setting" ? (
             <>
-              Raise <b>Settings → Web search → Items searched per question</b> to search more (up to 25; each is
-              one search from your quota).
+              Set <b>Settings → Web search → Items searched per question</b> to Automatic, or a higher number, to
+              search more (each item is one search from your quota).
             </>
           ) : (
             <>

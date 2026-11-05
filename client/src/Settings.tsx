@@ -451,22 +451,31 @@ export function Settings({
                 <span>
                   Items searched per question
                   <small>
-                    A question that lists several things — "what are A / B / C?" — gets one search per item, up to
-                    this many. Each item uses one search from your{" "}
-                    {getSearchProvider(settings.searchProvider)?.label ?? "search"} quota. Items past the limit
-                    are not looked up, and the reply says which.
+                    A question that lists several things — "what are A / B / C?" — gets one search per item.{" "}
+                    {settings.searchItemsAuto
+                      ? "Automatic searches every item listed, as many as the smallest model in the run has room for, up to 25."
+                      : `Up to ${settings.searchItems}.`}{" "}
+                    Each item uses one search from your {getSearchProvider(settings.searchProvider)?.label ?? "search"}{" "}
+                    quota. Items not searched are named in the reply.
                   </small>
                 </span>
-                <input
-                  type="number"
-                  min={1}
-                  max={25}
-                  step={1}
-                  value={settings.searchItems}
+                <select
+                  value={settings.searchItemsAuto ? "auto" : String(settings.searchItems)}
                   onChange={(e) =>
-                    patch({ searchItems: Math.min(25, Math.max(1, Math.round(Number(e.target.value)) || 1)) })
+                    e.target.value === "auto"
+                      ? patch({ searchItemsAuto: true })
+                      : patch({ searchItemsAuto: false, searchItems: Number(e.target.value) })
                   }
-                />
+                >
+                  <option value="auto">Automatic</option>
+                  {[...new Set([1, 3, 5, 10, 15, 20, 25, settings.searchItems])]
+                    .sort((a, b) => a - b)
+                    .map((n) => (
+                      <option key={n} value={String(n)}>
+                        At most {n}
+                      </option>
+                    ))}
+                </select>
               </label>
 
               <label className="settings-row">

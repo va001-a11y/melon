@@ -55,6 +55,7 @@ export const DEFAULT_SETTINGS: Settings = {
   searchProvider: "",
   searchApiKeys: {},
   readFullPages: false,
+  searchItemsAuto: true,
   searchItems: 5,
   linkLimit: 3,
 };

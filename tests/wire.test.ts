@@ -7,7 +7,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { toRunAgent } from "../client/src/wire.ts";
+import { toRunAgent, toRunSettings } from "../client/src/wire.ts";
 
 const agent = {
   id: "a",
@@ -39,4 +39,17 @@ test("switches left off arrive as off, and the page's own bookkeeping stays behi
   assert.equal(spec.webSearch, false);
   assert.equal("active" in spec, false);
   assert.equal("color" in spec, false);
+});
+
+test("automatic items go out as the most there is; a fixed number goes out as itself", () => {
+  const base = { searchProvider: "tavily", searchApiKeys: { tavily: "t", brave: "b" }, searchItems: 5 } as any;
+  assert.equal(toRunSettings({ ...base, searchItemsAuto: true }).searchItems, 25);
+  assert.equal(toRunSettings({ ...base, searchItemsAuto: false }).searchItems, 5);
+});
+
+test("only the selected engine's search key leaves the page", () => {
+  const out = toRunSettings({ searchProvider: "tavily", searchApiKeys: { tavily: "t", brave: "b" }, searchItemsAuto: true } as any);
+  assert.equal(out.searchApiKey, "t");
+  assert.equal("searchApiKeys" in out, false);
+  assert.ok(!JSON.stringify(out).includes('"b"'));
 });

@@ -33,6 +33,7 @@ export {
 } from "./registry.js";
 
 export {
+  MAX_SEARCH_ITEMS,
   SEARCH_PROVIDERS,
   formatSearchContext,
   getSearchProvider,

@@ -325,6 +325,7 @@ export default function App() {
     delete (stored as { replyWidth?: unknown }).replyWidth;
     if (typeof stored.replyCardWidth !== "number" || !(stored.replyCardWidth >= 0)) stored.replyCardWidth = 0;
     stored.searchItems = Math.min(25, Math.max(1, Math.round(Number(stored.searchItems)) || 5));
+    stored.searchItemsAuto = stored.searchItemsAuto !== false;
     stored.linkLimit = Math.min(10, Math.max(1, Math.round(Number(stored.linkLimit)) || 3));
     stored.searchApiKeys = withSearchKeys(stored.searchApiKeys, liveSecrets());
     return stored;

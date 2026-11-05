@@ -72,7 +72,12 @@ export interface Settings {
   searchApiKeys: Record<string, string>;
   /** Read the top results in full through Jina Reader. Off by default: slower, and uses more context. */
   readFullPages: boolean;
-  /** Most items of a listed question searched separately, 1–25. */
+  /**
+   * Search every item a question lists, as many as the smallest model has
+   * room for (at most 25). Off, searchItems is a fixed cap instead.
+   */
+  searchItemsAuto: boolean;
+  /** Most items of a listed question searched separately, 1–25, when not automatic. */
   searchItems: number;
   /** Most pages an agent that follows links may open for one answer, 1–10. */
   linkLimit: number;

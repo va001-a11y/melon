@@ -2981,12 +2981,36 @@ body {
   padding-top: 8px;
 }
 
+/* A button, not a line of grey text: shown collapsed, a bare summary was not
+   recognised as something that opens. */
 .sources summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   cursor: pointer;
   font-size: 11.5px;
   color: var(--text-dim);
   list-style: none;
   user-select: none;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+}
+
+.sources-caret {
+  display: inline-block;
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+
+.sources[open] .sources-caret {
+  transform: rotate(90deg);
+}
+
+.sources summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .sources summary::-webkit-details-marker {
@@ -2995,6 +3019,7 @@ body {
 
 .sources summary:hover {
   color: var(--text);
+  border-color: var(--accent);
 }
 
 .sources ol {

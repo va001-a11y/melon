@@ -1,5 +1,6 @@
+import { MAX_SEARCH_ITEMS } from "@melon/core";
 import type { AgentSpec } from "@melon/core";
-import type { Agent } from "./types";
+import type { Agent, Settings } from "./types";
 
 /**
  * Every field of a type, each required to be written — as undefined where it
@@ -32,5 +33,25 @@ export function toRunAgent(a: Agent, groupPersonalities: Record<string, string>)
     webSearch: a.webSearch === true,
     followLinks: a.followLinks === true,
     team: a.team ?? 1,
+  };
+}
+
+/**
+ * Settings as a run request carries them.
+ *
+ * Exactly one search key goes out: the selected engine's. The map holds a key
+ * for every engine the user has set up, and none of the others has any
+ * business leaving the page -- not to Melon's server, and certainly not to a
+ * different search company.
+ *
+ * "Automatic" items is sent as the most there is; the room in the smallest
+ * model still decides how many actually fit (core searchBudget).
+ */
+export function toRunSettings<T extends Settings>(settings: T) {
+  const { searchApiKeys, ...rest } = settings;
+  return {
+    ...rest,
+    searchApiKey: searchApiKeys?.[settings.searchProvider] ?? "",
+    searchItems: settings.searchItemsAuto === false ? settings.searchItems : MAX_SEARCH_ITEMS,
   };
 }
