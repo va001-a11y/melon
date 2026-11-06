@@ -273,3 +273,13 @@ test("a searching answer's estimate counts the search results it reads, links or
   const plain = estimateRun([agent(false)], settings, 1000, 100).inputTokens;
   assert.equal(searching - plain, 2500);
 });
+
+test("each result is offered with what its own text says about the names asked", async () => {
+  // SCP-6065 is titled with a number; only its text says it is Gevurah-class.
+  await ask(true);
+  assert.match(selections[0], /L1: Esoteric classes in SCP[^\n]*\n {4}says: "Khonsu and others\."/);
+});
+
+test("the chooser is told a shared name is not the thing asked about", () => {
+  assert.match(LINK_SELECT_SYSTEM, /same name as the thing asked about is not that thing/);
+});

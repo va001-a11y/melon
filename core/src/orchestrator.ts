@@ -37,6 +37,7 @@ import {
 } from "./search.js";
 import { ollamaMaxContext } from "./providers/ollama.js";
 import { outputLimitFrom } from "./providers/sse.js";
+import { excerptFor, plainText } from "./excerpt.js";
 import {
   LINK_SELECT_SYSTEM,
   OPENED_PAGE_CHARS,
@@ -465,6 +466,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
     coverage?: Coverage;
     /** Results already read in full, which following links need not open again. */
     readInFull: Set<string>;
+    hints: Map<string, string>;
   }> | null = null;
   const searchOnce = (engineId: string, apiKey: string, planner: AgentSpec) => {
     if (!sharedSearch) sharedSearch = plannedSearch(engineId, apiKey, planner);
@@ -543,6 +545,8 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
         ? { searched: listed.length, of: listedAll.length, limitedBy: budget.limitedBy }
         : undefined,
       readInFull: new Set(hits.filter((h) => h.fullPage).map((h) => samePage(h.url))),
+      /** What each result's own text says about the names asked, for choosing pages. */
+      hints: new Map(hits.map((h) => [samePage(h.url), hintFor(h.snippet)])),
     };
   };
 
@@ -641,6 +645,17 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
   /** The names the question asks about, which pages are excerpted around. */
   const askedNames = keyTerms(req.userMessage);
 
+  /**
+   * A line from a result's own text about the names asked, to choose pages
+   * by. Empty when it mentions none of them: then it says nothing useful.
+   */
+  const hintFor = (snippet: string): string => {
+    const text = plainText(snippet).replace(/\s+/g, " ");
+    const lower = text.toLowerCase();
+    const names = askedNames.filter((n) => lower.includes(n.toLowerCase()));
+    return names.length ? excerptFor(text, names, 200).replace(/\s+/g, " ").trim() : "";
+  };
+
   /** Words worth ranking links by: the question's names, and its longer words. */
   const linkTerms = [
     ...new Set([...keyTerms(req.userMessage), ...(req.userMessage.toLowerCase().match(/\p{L}{5,}/gu) ?? [])]),
@@ -660,13 +675,18 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
     round: number,
     material: string,
     citations: Citation[],
-    readInFull: Set<string>
+    readInFull: Set<string>,
+    hints: Map<string, string>
   ): Promise<{ block: string; added: Citation[]; openedNumbers: Set<number> }> => {
     const numbered = new Map(citations.map((c, i) => [samePage(c.url), i + 1]));
     const opened: { n: number; page: ReadPage }[] = [];
     const added: Citation[] = [];
     const tried = new Set<string>(readInFull);
-    let pool: Link[] = citations.map((c) => ({ url: c.url, text: c.title || c.url }));
+    let pool: Link[] = citations.map((c) => ({
+      url: c.url,
+      text: c.title || c.url,
+      hint: hints.get(samePage(c.url)) || undefined,
+    }));
 
     while (opened.length < linkLimit) {
       const offer = new Map<string, Link>();
@@ -835,7 +855,8 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
                 round,
                 searchContext,
                 searchCitations,
-                shared.readInFull
+                shared.readInFull,
+                shared.hints
               ).catch((err: unknown) => {
                 if (controller.signal.aborted) throw err;
                 return { block: "", added: [] as Citation[], openedNumbers: new Set<number>() };

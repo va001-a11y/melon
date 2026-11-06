@@ -1393,6 +1393,27 @@ guessing at.
 part nobody reads.** Checking the actual page took one request; every
 earlier theory here was argued from screenshots.
 
+### Automatic searched five items with room for twenty-five (2026-11-06)
+
+Making "Items searched per question" automatic sent the maximum, 25, and
+the room for results followed it: a five-item question was handed fifteen
+full-length results, about 6,500 tokens in one request, and Groq's free
+tier refused it as too large. The room now follows the items actually
+listed. The refusal itself said "Press Reset", about a brand-new chat; it
+now names what adds to a request, and that a free tier's limit is often
+tokens per minute. The preflight estimate had never counted the search
+results a searching answer reads; it does now.
+
+### The right page was offered under a number (2026-11-06)
+
+The same run had SCP-6065 among its results — whose own footnote defines
+the Gevurah class — and the agent opened "A.R.G.U.S. Inc. Hub" instead: a
+company on the Polish branch that shares a name with the Argus class. It
+was choosing from titles, and SCP article titles are numbers. Each result
+is now offered with a line from its own text about the names asked —
+"…Object Class: Gevurah…" — and the chooser is told that something sharing
+a name with what is asked is not that thing.
+
 **The page that defined both names was in no result at all.** Link
 following cannot reach a page no result leads to; only a better search
 can. Which search engine is used matters as much as anything here.
