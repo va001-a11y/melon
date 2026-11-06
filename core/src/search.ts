@@ -530,7 +530,7 @@ export function pruneUnusedSources(
  * 1,500 characters is roughly 375 tokens — enough for the part of a page
  * that answers a question, which is almost always near the top.
  */
-const MAX_SNIPPET_CHARS = 1500;
+export const MAX_SNIPPET_CHARS = 1500;
 
 /**
  * The most a search block can cost, in tokens, now that each result is
@@ -640,7 +640,8 @@ function clampSnippet(text: string, limit = MAX_SNIPPET_CHARS): string {
  * material precisely because this text came off the open web.
  */
 /** What five snippets take: the room a search has always had, and still has at least. */
-const BASE_TEXT_CHARS = 5 * MAX_SNIPPET_CHARS;
+export const BASE_SEARCH_CHARS = 5 * MAX_SNIPPET_CHARS;
+const BASE_TEXT_CHARS = BASE_SEARCH_CHARS;
 
 /** Below this a snippet no longer defines anything, so it decides how many items can fit. */
 const MIN_USEFUL_SNIPPET = 600;

@@ -30,6 +30,8 @@ import {
   runWebSearch,
   searchQueryFor,
   searchBudget,
+  BASE_SEARCH_CHARS,
+  MAX_SNIPPET_CHARS,
   trimQuery,
   worthSearching,
 } from "./search.js";
@@ -503,7 +505,16 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
     const notSearched = listedAll.slice(budget.items);
     const queries = listed.length ? listed : [searchQueryFor(req.history, req.userMessage)];
     const first = await searchAll(engineId, apiKey, queries);
-    let hits = interleaveHits(first, queries.length === 1 ? 5 : budget.maxHits);
+    /*
+     * The room a search uses follows the items actually asked about, not the
+     * most the budget would allow. With "Automatic", a five-item question was
+     * handed 15 full-length results — 6,500 tokens in one request — and Groq's
+     * free tier refused it as too large. Five items get what five always got;
+     * only a long list uses more, and never more than the budget.
+     */
+    const cap = queries.length === 1 ? 5 : Math.min(budget.maxHits, Math.max(8, queries.length));
+    const room = Math.min(budget.textChars, Math.max(BASE_SEARCH_CHARS, queries.length * MAX_SNIPPET_CHARS));
+    let hits = interleaveHits(first, cap);
 
     // Past the limit, a model asked for better queries could cover a few more
     // items at most, so it is not asked: the card says what was left instead.
@@ -516,7 +527,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
       if (extra.length > 0) {
         const more = await searchAll(engineId, apiKey, extra).catch(() => [] as SearchHit[][]);
         if (more.length > 0) {
-          hits = interleaveHits([hits, ...more], budget.maxHits);
+          hits = interleaveHits([hits, ...more], cap);
           queries.push(...extra);
         }
       }
@@ -526,7 +537,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
     // a relay of five agents reads each page once, not five times.
     if (req.settings.readFullPages) hits = await readFullPages(hits, controller.signal);
     return {
-      context: formatSearchContext(queries, hits, budget.textChars, notSearched, askedNames),
+      context: formatSearchContext(queries, hits, room, notSearched, askedNames),
       citations: hits.map((h) => ({ url: h.url, title: h.title || undefined })),
       coverage: notSearched.length
         ? { searched: listed.length, of: listedAll.length, limitedBy: budget.limitedBy }

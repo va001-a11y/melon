@@ -108,12 +108,22 @@ export const openai: ProviderAdapter = {
       }
     }
 
-    // Report the real size, so "too large" is a measurement, not a guess.
+    /*
+     * Report the real size, so "too large" is a measurement, not a guess — and
+     * name everything that adds to it. This said only "Press Reset", and the
+     * request it was reporting came from a brand-new chat: the size was search
+     * results and pages the agent had opened, and a free tier's limit on
+     * tokens per minute (2026-11-06).
+     */
     if (res.status === 413) {
+      const messages = `${wireMessages.length} message${wireMessages.length === 1 ? "" : "s"}`;
       throw new Error(
         `${label} rejected the request as too large (413). Melon sent ${payloadKb} KB ` +
-          `(~${Math.ceil(payload.length / 4).toLocaleString()} tokens, ${wireMessages.length} messages). ` +
-          `Press Reset to clear this chat, start a new one, or remove any attachment.`
+          `(~${Math.ceil(payload.length / 4).toLocaleString()} tokens, ${messages}). ` +
+          `The size is the conversation, any attachment, and the web search results and pages this agent was ` +
+          `given. On a free tier the limit is often tokens per minute, not the model's size. Lower Settings → ` +
+          `Web search → Pages an agent may open, switch Follow links off for this agent, press Reset to start ` +
+          `the conversation afresh, or use a provider or plan with a higher limit.`
       );
     }
     if (!res.ok || !res.body) await throwHttpError(res, label, url);

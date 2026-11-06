@@ -109,7 +109,13 @@ const PAGES: Record<string, string> = {
   Zorblax: "Zorblax Industries was founded by Ada Quill in 1987.",
 };
 
+/** Long results, three a query, as a real engine returns for a well-covered name. */
+let longResults = false;
+
 function searchResults(query: string) {
+  if (longResults) {
+    return [1, 2, 3].map((i) => ({ url: `https://wiki.example/${encodeURIComponent(query)}/${i}`, title: `${query} ${i}`, content: "x ".repeat(3000) }));
+  }
   // One search for everything returns only the best-known names, as Tavily did.
   if (query.includes("/")) return ["Tiamat", "Argus"].map((n) => ({ url: `https://wiki.example/${n}`, title: `${n} - SCP wiki`, content: PAGES[n] }));
   // A query for the company's founder finds only pages that never name it.
@@ -159,6 +165,7 @@ after(() => {
 beforeEach(() => {
   searches = [];
   modelCalls = [];
+  longResults = false;
 });
 
 async function ask(question: string, model = "m", maxOutputTokens = 512, extra: Record<string, unknown> = {}) {
@@ -289,4 +296,16 @@ test("the model is told that missing from the results is not evidence of anythin
   assert.match(block, /never conclude/i);
   assert.match(block, /does not exist/);
   assert.match(block, /used but not defined/, "an example of a term is not its definition");
+});
+
+test("five items on Automatic get the room five items always had, not the most allowed", async () => {
+  // A five-item question on Automatic was handed 15 full-length results — 6,500
+  // tokens in one request — and Groq's free tier refused it (2026-11-06).
+  longResults = true;
+  await ask(SCP, "m", 512, { searchItems: 25 });
+  const prompt = prompts();
+  const block = prompt.slice(prompt.indexOf("WEB SEARCH RESULTS"));
+  const results = (block.match(/^\[\d+\] /gm) ?? []).length;
+  assert.ok(results <= 8, `${results} results`);
+  assert.ok(block.length < 7500 + 3500, `${block.length} characters of search results`);
 });

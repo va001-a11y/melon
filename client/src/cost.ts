@@ -12,10 +12,15 @@ const OPENED_PAGE_TOKENS = 790;
 const CHOICE_PROMPT_TOKENS = 300;
 const CHOICE_REPLY_TOKENS = 150;
 
-function followsLinks(agent: Agent, settings: Settings): boolean {
+/** Whether Melon searches for this agent, and so hands its answer a block of results to read. */
+function usesMelonSearch(agent: Agent, settings: Settings): boolean {
   const melonSearch = Boolean(settings.searchProvider && (settings.searchApiKeys?.[settings.searchProvider] ?? "").trim());
   const def = PROVIDERS.find((p) => p.id === agent.provider);
-  return melonSearch && agent.webSearch === true && agent.followLinks === true && webSearchBlockReason(def, agent.model) !== null;
+  return melonSearch && agent.webSearch === true && webSearchBlockReason(def, agent.model) !== null;
+}
+
+function followsLinks(agent: Agent, settings: Settings): boolean {
+  return usesMelonSearch(agent, settings) && agent.followLinks === true;
 }
 
 /** USD per 1M tokens, keyed by substring match on the model id. */
@@ -86,6 +91,9 @@ export function estimateRun(
     const outFactor = settings.detailedCoT ? 0.85 : 0.6;
     let agentIn = perAgentInput;
     let agentOut = Math.round(settings.maxOutputTokens * outFactor);
+    // The answer reads the search results too; this was never counted, so a
+    // searching agent looked as cheap as one that did not search.
+    if (usesMelonSearch(agent, settings)) agentIn += SEARCH_BLOCK_TOKENS;
     if (followsLinks(agent, settings)) {
       const pages = settings.linkLimit;
       for (let opened = 0; opened < pages; opened++) {

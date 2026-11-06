@@ -263,3 +263,13 @@ test("choosing pages has room to think, and a provider's lower limit is respecte
     "refused once, then asked at the provider's limit from the start for the rest of the run"
   );
 });
+
+test("a searching answer's estimate counts the search results it reads, links or not", async () => {
+  const { estimateRun } = await import("../client/src/cost.ts");
+  const settings = { maxOutputTokens: 1000, detailedCoT: false, searchProvider: "tavily", searchApiKeys: { tavily: "s" }, linkLimit: 3 } as any;
+  const agent = (webSearch: boolean) =>
+    ({ id: "a", provider: "groq", model: "llama-3.3-70b-versatile", baseUrl: "", webSearch, followLinks: false }) as any;
+  const searching = estimateRun([agent(true)], settings, 1000, 100).inputTokens;
+  const plain = estimateRun([agent(false)], settings, 1000, 100).inputTokens;
+  assert.equal(searching - plain, 2500);
+});
