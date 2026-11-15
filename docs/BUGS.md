@@ -1414,6 +1414,17 @@ is now offered with a line from its own text about the names asked —
 "…Object Class: Gevurah…" — and the chooser is told that something sharing
 a name with what is asked is not that thing.
 
+### "Please try again in 5.7s", reported as a failure (2026-11-15)
+
+With thinking off, Nemotron answered the SCP question well — sourced
+definitions where pages gave them, and "listed but not defined" where they
+did not. Qwen, on Groq's free tier, failed: Groq allows that model 7,000
+input tokens a minute, Qwen's own hidden requests had used 4,336 of them
+seconds earlier, and its answer needed 3,329. Groq's refusal said exactly
+how long to wait — 5.7 seconds — and Melon treated it as final. A wait of
+up to 30 seconds, read from the Retry-After header or the provider's own
+words, is now sat out and the request sent again, twice at most.
+
 **The page that defined both names was in no result at all.** Link
 following cannot reach a page no result leads to; only a better search
 can. Which search engine is used matters as much as anything here.

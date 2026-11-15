@@ -1,7 +1,15 @@
 import type { FinishReason, ProviderAdapter, ProviderChatArgs, ProviderResult } from "../types.js";
 import { NEMOTRON_THINKING_OFF, thinkingSwitch } from "../thinking.js";
 import { CitationCollector } from "./citations.js";
-import { describeNetworkError, fetchLocalAware, readStreamLines, throwHttpError } from "./sse.js";
+import {
+  MAX_RATE_WAIT_MS,
+  describeNetworkError,
+  fetchLocalAware,
+  pause,
+  rateLimitWait,
+  readStreamLines,
+  throwHttpError,
+} from "./sse.js";
 import { imageAttachments, inlineTextAttachments } from "./attachments.js";
 import { COT_END, COT_START } from "../prompts.js";
 
@@ -120,6 +128,8 @@ export const openai: ProviderAdapter = {
      * than the agent failing over an optional field.
      */
     let thinkingSwitchRefused = false;
+    /** The request as last sent, which a fallback below may have changed. */
+    let lastSent = payload;
     if ((res.status === 400 || res.status === 422) && thinkingFields.length > 0) {
       const retry = { ...body };
       for (const field of thinkingFields) delete retry[field];
@@ -127,6 +137,7 @@ export const openai: ProviderAdapter = {
         const second = await fetch(url, { method: "POST", signal, headers, body: JSON.stringify(retry) });
         if (second.ok) {
           res = second;
+          lastSent = JSON.stringify(retry);
           thinkingSwitchRefused = true;
           for (const field of thinkingFields) delete body[field];
         }
@@ -144,10 +155,34 @@ export const openai: ProviderAdapter = {
       retry.max_completion_tokens = maxOutputTokens;
       try {
         const second = await fetch(url, { method: "POST", signal, headers, body: JSON.stringify(retry) });
-        if (second.ok) res = second;
+        if (second.ok) {
+          res = second;
+          lastSent = JSON.stringify(retry);
+        }
       } catch {
         /* keep the original failure */
       }
+    }
+
+    /*
+     * A short rate-limit wait, given in the refusal. Groq's free tier allows
+     * so many input tokens a minute; a run that had just planned a search and
+     * chosen pages had used most of it, and the answer was refused with
+     * "Please try again in 5.7s" — then reported as a failure (2026-11-15).
+     * A wait Melon can sensibly sit out is sat out, twice at most; a longer
+     * one is reported as before.
+     */
+    for (let attempt = 0; res.status === 429 && attempt < 2; attempt++) {
+      const wait = await rateLimitWait(res);
+      if (wait === null || wait > MAX_RATE_WAIT_MS) break;
+      handlers.onActivity?.();
+      await pause(wait + 250, signal);
+      try {
+        res = await fetch(url, { method: "POST", signal, headers, body: lastSent });
+      } catch (err) {
+        throw describeNetworkError(err, label, url);
+      }
+      handlers.onActivity?.();
     }
 
     /*

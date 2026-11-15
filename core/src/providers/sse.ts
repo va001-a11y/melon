@@ -42,6 +42,52 @@ export async function* readStreamLines(
   }
 }
 
+/** The longest rate-limit wait sat out rather than reported. */
+export const MAX_RATE_WAIT_MS = 30_000;
+
+/**
+ * How long a 429 asks the caller to wait, in milliseconds, or null when it
+ * does not say. The standard header first, then the provider's own words —
+ * Groq writes "Please try again in 5.7s" or "in 1m12.3s". Reads a copy of the
+ * body, so the original is still there to report from.
+ */
+export async function rateLimitWait(res: Response): Promise<number | null> {
+  const ms = Number(res.headers.get("retry-after-ms"));
+  if (Number.isFinite(ms) && ms > 0) return ms;
+  const after = res.headers.get("retry-after");
+  if (after) {
+    const seconds = Number(after);
+    if (Number.isFinite(seconds)) return seconds * 1000;
+    const at = Date.parse(after);
+    if (Number.isFinite(at)) return Math.max(0, at - Date.now());
+  }
+  let text = "";
+  try {
+    text = await res.clone().text();
+  } catch {
+    return null;
+  }
+  const m = text.match(/(?:try again|retry)\s+in\s+(?:(\d+)\s*m(?:in)?\s*)?([\d.]+)\s*s/i);
+  if (!m) return null;
+  return (Number(m[1] ?? 0) * 60 + Number(m[2])) * 1000;
+}
+
+/** Waits, unless the request is stopped first. */
+export function pause(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(signal.reason);
+      },
+      { once: true }
+    );
+  });
+}
+
 /** Pull a human-usable message out of whatever the endpoint returned. */
 function extractMessage(bodyText: string): string {
   const trimmed = bodyText.trim();
