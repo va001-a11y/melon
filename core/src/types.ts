@@ -33,6 +33,8 @@ export interface AgentSpec {
    * its model, so it is off unless switched on. See followLinks.ts.
    */
   followLinks?: boolean;
+  /** Ask the model not to think before answering, where its provider can switch that off (thinking.ts). */
+  thinkingOff?: boolean;
   apiKey?: string;
   /** Custom base URL for OpenAI-compatible or Ollama endpoints. */
   baseUrl?: string;
@@ -175,6 +177,8 @@ export interface ProviderResult {
   finishReason?: FinishReason;
   /** Sources consulted, when the provider searched and reported them. */
   citations?: Citation[];
+  /** Thinking-off was asked for and the provider refused it, so the request went without. */
+  thinkingSwitchRefused?: boolean;
 }
 
 export interface ProviderChatArgs {
@@ -197,6 +201,8 @@ export interface ProviderChatArgs {
   detailedCoT?: boolean;
   /** Ask the provider to search the web before answering. */
   webSearch?: boolean;
+  /** Ask the model not to think first, by its provider's own switch (thinking.ts). */
+  thinkingOff?: boolean;
   system: string;
   messages: ChatMessage[];
   maxOutputTokens: number;

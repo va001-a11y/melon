@@ -139,6 +139,7 @@ function normaliseAgent(raw: Record<string, unknown>): Agent | null {
     // Agent type.
     webSearch: raw.webSearch === true,
     followLinks: raw.followLinks === true,
+    thinkingOff: raw.thinkingOff === true,
     team: typeof raw.team === "number" && raw.team > 0 ? raw.team : 1,
   };
 }
@@ -746,6 +747,8 @@ export default function App() {
             searched: meta?.searched,
             capped: meta?.capped,
             coverage: meta?.coverage,
+            queries: meta?.queries,
+            thinkingSwitchRefused: meta?.thinkingSwitchRefused,
           })),
         onAgentError: (id, message, round) =>
           updateRun(at(round), id, (r) => ({ ...r, status: "error", error: message })),
@@ -855,6 +858,8 @@ export default function App() {
               searched: meta?.searched,
               capped: meta?.capped,
               coverage: meta?.coverage,
+              queries: meta?.queries,
+              thinkingSwitchRefused: meta?.thinkingSwitchRefused,
             })),
           onAgentError: (id, message) => updateRun(blockId, id, (r) => ({ ...r, status: "error", error: message })),
           onAgentStopped: (id) => updateRun(blockId, id, (r) => ({ ...r, status: "stopped" })),

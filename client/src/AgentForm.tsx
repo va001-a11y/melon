@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Agent, ProviderDef } from "./types";
-import { browserBlockReason, webSearchBlockReason, webSearchIsAutomatic } from "@melon/core";
+import { browserBlockReason, thinkingSwitch, webSearchBlockReason, webSearchIsAutomatic } from "@melon/core";
 import { RUNS_LOCALLY } from "./target";
 import { DESKTOP_URL } from "./config";
 import { ROLES } from "./defaults";
@@ -17,6 +17,7 @@ export interface AgentDraft {
   personality: string;
   webSearch: boolean;
   followLinks: boolean;
+  thinkingOff: boolean;
 }
 
 export const EMPTY_DRAFT: AgentDraft = {
@@ -29,6 +30,7 @@ export const EMPTY_DRAFT: AgentDraft = {
   personality: "",
   webSearch: false,
   followLinks: false,
+  thinkingOff: false,
 };
 
 export function draftFromAgent(a: Agent): AgentDraft {
@@ -42,6 +44,7 @@ export function draftFromAgent(a: Agent): AgentDraft {
     personality: a.personality,
     webSearch: a.webSearch === true,
     followLinks: a.followLinks === true,
+    thinkingOff: a.thinkingOff === true,
   };
 }
 
@@ -105,6 +108,7 @@ export function AgentForm({
    * things up itself" when Melon is doing it would be simply untrue.
    */
   const searchesItself = webSearchBlockReason(def, draft.model) === null;
+  const thinkingControl = draft.model.trim() ? thinkingSwitch(draft.provider, draft.model) : null;
 
   /** Whether the note under the picker is needed at all. */
   const anyBlocked = useMemo(
@@ -396,6 +400,33 @@ export function AgentForm({
         itself never shows Melon its results, so there are no links to offer.
         The warning names the cost, because a vague one gets clicked past.
       */}
+      {/*
+        Only where Melon knows a switch that works (core thinking.ts): most
+        models have no thinking to switch off, and some that think cannot be
+        stopped — offering it there would promise something nothing does.
+      */}
+      {thinkingControl && (
+        <label className="search-row thinking-row">
+          <input
+            type="checkbox"
+            checked={!draft.thinkingOff}
+            onChange={(e) => patch({ thinkingOff: !e.target.checked })}
+          />
+          <span>
+            Think before answering
+            <small>
+              Off asks this model to answer straight away instead of reasoning privately first: faster and cheaper,
+              and it cannot run out of room while thinking, but weaker on hard problems.{" "}
+              {thinkingControl.kind === "ollama"
+                ? "Takes effect only if the model has a thinking mode."
+                : thinkingControl.kind === "nvidia-kwargs"
+                  ? "Uses NVIDIA's documented switch for this model; if NVIDIA's service does not accept it, Melon asks again with thinking on and says so on the reply."
+                  : ""}
+            </small>
+          </span>
+        </label>
+      )}
+
       {draft.webSearch && !searchBlocked && !searchesItself && !searchAutomatic && (
         <label className="search-row follow-row">
           <input

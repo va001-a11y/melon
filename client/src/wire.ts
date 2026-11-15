@@ -32,6 +32,7 @@ export function toRunAgent(a: Agent, groupPersonalities: Record<string, string>)
     groupPersonality: groupPersonalities[a.role]?.trim() || undefined,
     webSearch: a.webSearch === true,
     followLinks: a.followLinks === true,
+    thinkingOff: a.thinkingOff === true,
     team: a.team ?? 1,
   };
 }

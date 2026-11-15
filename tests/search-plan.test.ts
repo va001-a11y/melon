@@ -309,3 +309,16 @@ test("five items on Automatic get the room five items always had, not the most a
   assert.ok(results <= 8, `${results} results`);
   assert.ok(block.length < 7500 + 3500, `${block.length} characters of search results`);
 });
+
+test("the card is told what was searched for, and what a model suggested after", async () => {
+  let events = await ask(SCP);
+  assert.deepEqual(events.find((e) => e.type === "agent-done")?.data.queries, {
+    queries: ["Tiamat SCP", "Argus SCP", "Khonsu SCP", "Gevurah SCP", "Drygioni SCP"],
+    planned: [],
+  });
+  events = await ask("Who founded Zorblax Industries?");
+  assert.deepEqual(events.find((e) => e.type === "agent-done")?.data.queries, {
+    queries: ["Who founded Zorblax Industries?"],
+    planned: ["Zorblax Industries founder"],
+  });
+});

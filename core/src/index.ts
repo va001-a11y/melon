@@ -32,6 +32,9 @@ export {
   RECOMMENDED_AGENTS,
 } from "./registry.js";
 
+export { thinkingSwitch } from "./thinking.js";
+export type { ThinkingSwitch } from "./thinking.js";
+
 export {
   MAX_SEARCH_ITEMS,
   SEARCH_PROVIDERS,

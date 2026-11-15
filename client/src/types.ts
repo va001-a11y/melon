@@ -29,6 +29,8 @@ export interface Agent {
   webSearch?: boolean;
   /** Open pages linked from Melon's search results before answering. Costs more; off by default. */
   followLinks?: boolean;
+  /** Ask the model not to think first, where its provider can switch that off. */
+  thinkingOff?: boolean;
   /** 1-based pipeline stage. Everything defaults to team 1. */
   team?: number;
 }
@@ -227,6 +229,10 @@ export interface AgentResponse {
   capped?: { to: number; from: number; by: string };
   /** A listed question had more items than were searched: how many were, and why not more. */
   coverage?: { searched: number; of: number; limitedBy: "setting" | "room" };
+  /** What Melon searched for, and what a model suggested after the first search missed something. */
+  queries?: { queries: string[]; planned: string[] };
+  /** Thinking-off was asked for and the provider refused it, so this reply was thought through as usual. */
+  thinkingSwitchRefused?: boolean;
   /** While following links, before any text: pages opened so far, of the limit. */
   reading?: { opened: number; limit: number };
   /** Pages the model consulted, when web search was on. */

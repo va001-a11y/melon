@@ -33,6 +33,8 @@ export interface RunCallbacks {
       searched?: boolean;
       capped?: { to: number; from: number; by: string };
       coverage?: { searched: number; of: number; limitedBy: "setting" | "room" };
+      queries?: { queries: string[]; planned: string[] };
+      thinkingSwitchRefused?: boolean;
     }
   ) => void;
   onAgentError: (agentId: string, message: string, round?: number) => void;
@@ -354,6 +356,8 @@ function dispatch(event: string, data: any, callbacks: RunCallbacks): boolean {
           searched: data.searched,
           capped: data.capped,
           coverage: data.coverage,
+          queries: data.queries,
+          thinkingSwitchRefused: data.thinkingSwitchRefused,
         });
         break;
       case "agent-error":

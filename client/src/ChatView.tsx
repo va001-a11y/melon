@@ -296,6 +296,20 @@ function ResizeGrip({ onResize }: { onResize: (width: number) => void }) {
   );
 }
 
+/**
+ * What Melon searched for. Without it, a page missing from the results could
+ * not be traced: was it never searched for, or searched for and not found?
+ */
+function SearchedFor({ queries }: { queries: { queries: string[]; planned: string[] } }) {
+  const quoted = (list: string[]) => list.map((q) => `“${q}”`).join(", ");
+  return (
+    <p className="searched-for">
+      Searched for {quoted(queries.queries)}.
+      {queries.planned.length > 0 && <> Then, for what that missed: {quoted(queries.planned)}.</>}
+    </p>
+  );
+}
+
 function AgentCard({
   response,
   showReasoning,
@@ -571,6 +585,17 @@ function AgentCard({
       {/* Collapsed until asked for: the count says what is there, and a reply
           that searched several items, or followed links, can cite a long list
           that would otherwise push the next reply off the screen. */}
+      {/* No sources to show it under: still say what was searched for. */}
+      {!(response.citations && response.citations.length > 0) && response.queries && (
+        <SearchedFor queries={response.queries} />
+      )}
+      {response.status === "done" && response.thinkingSwitchRefused && (
+        <div className="cutoff-note">
+          <b>Thinking stayed on.</b> This provider did not accept the request to answer without thinking, so Melon
+          asked again with thinking on. Switch <b>Think before answering</b> back on in this agent's properties to
+          skip the refused request.
+        </div>
+      )}
       {response.citations && response.citations.length > 0 && (
         <details className="sources">
           <summary>
@@ -607,6 +632,7 @@ function AgentCard({
               </li>
             ))}
           </ol>
+          {response.queries && <SearchedFor queries={response.queries} />}
         </details>
       )}
 

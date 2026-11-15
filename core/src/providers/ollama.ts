@@ -168,7 +168,8 @@ export const ollama: ProviderAdapter = {
              * Left alone when reasoning is switched on: that is the model
              * doing what the user asked for.
              */
-            ...(info.canThink && args.detailedCoT === false ? { think: false } : {}),
+            // The agent's own "Think before answering" switch asks the same.
+            ...(info.canThink && (args.detailedCoT === false || args.thinkingOff) ? { think: false } : {}),
             // num_ctx is not optional. Left unset, Ollama uses 4096 and
             // TRUNCATES anything longer without a word — no error, no
             // warning, just a model that stops seeing the start of the

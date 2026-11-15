@@ -1,4 +1,5 @@
 import type { FinishReason, ProviderAdapter, ProviderChatArgs, ProviderResult } from "../types.js";
+import { thinkingSwitch } from "../thinking.js";
 import { CitationCollector } from "./citations.js";
 import { describeNetworkError, readStreamLines, throwHttpError } from "./sse.js";
 import { imageAttachments, inlineTextAttachments } from "./attachments.js";
@@ -29,7 +30,12 @@ export const google: ProviderAdapter = {
               })),
             ],
           })),
-          generationConfig: { maxOutputTokens },
+          generationConfig: {
+            maxOutputTokens,
+            // The agent's "Think before answering" switch, where this model
+            // can turn thinking off at all (thinking.ts): 2.5 Pro cannot.
+            ...(args.thinkingOff && thinkingSwitch("google", model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+          },
           // Grounding with Google Search. The model decides whether a search
           // would help, runs it, and cites what it used.
           ...(webSearch ? { tools: [{ google_search: {} }] } : {}),

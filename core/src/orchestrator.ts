@@ -467,6 +467,9 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
     /** Results already read in full, which following links need not open again. */
     readInFull: Set<string>;
     hints: Map<string, string>;
+    /** What was searched for, and what a model suggested after that missed something. */
+    queries: string[];
+    plannedQueries: string[];
   }> | null = null;
   const searchOnce = (engineId: string, apiKey: string, planner: AgentSpec) => {
     if (!sharedSearch) sharedSearch = plannedSearch(engineId, apiKey, planner);
@@ -521,6 +524,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
     // Past the limit, a model asked for better queries could cover a few more
     // items at most, so it is not asked: the card says what was left instead.
     const missing = notSearched.length ? [] : missingTerms(keyTerms(req.userMessage), hits);
+    let suggested: string[] = [];
     // The demo model has no real answers to give, so it cannot write queries
     // either; asking it would only spend search quota on its canned text.
     if (missing.length > 0 && planner.provider !== "demo") {
@@ -530,7 +534,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
         const more = await searchAll(engineId, apiKey, extra).catch(() => [] as SearchHit[][]);
         if (more.length > 0) {
           hits = interleaveHits([hits, ...more], cap);
-          queries.push(...extra);
+          suggested = extra;
         }
       }
     }
@@ -539,7 +543,9 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
     // a relay of five agents reads each page once, not five times.
     if (req.settings.readFullPages) hits = await readFullPages(hits, controller.signal);
     return {
-      context: formatSearchContext(queries, hits, room, notSearched, askedNames),
+      context: formatSearchContext([...queries, ...suggested], hits, room, notSearched, askedNames),
+      queries,
+      plannedQueries: suggested,
       citations: hits.map((h) => ({ url: h.url, title: h.title || undefined })),
       coverage: notSearched.length
         ? { searched: listed.length, of: listedAll.length, limitedBy: budget.limitedBy }
@@ -601,6 +607,9 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
         providerId: agent.provider,
         webSearch: false,
         detailedCoT: false,
+        // Choosing pages or planning a search needs no deliberation: ask every
+        // model that can stop thinking to stop, whatever its own setting.
+        thinkingOff: true,
         system,
         messages: [{ role: "user", content: prompt }],
         maxOutputTokens,
@@ -809,6 +818,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
       let searchContext = "";
       let searchCitations: Citation[] | undefined;
       let searchCoverage: Coverage | undefined;
+      let searchQueries: { queries: string[]; planned: string[] } | undefined;
       /*
        * Whether a search actually ran, which is not the same as whether the
        * user asked for one. The card words its warning differently for "the
@@ -847,6 +857,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
             searchContext = shared.context;
             searchCitations = shared.citations;
             searchCoverage = shared.coverage;
+            searchQueries = { queries: shared.queries, planned: shared.plannedQueries };
             didSearch = true;
 
             if (agent.followLinks === true && searchCitations.length > 0) {
@@ -908,6 +919,7 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
           providerId: agent.provider,
           webSearch: agent.webSearch === true,
           detailedCoT: req.settings.detailedCoT === true,
+          thinkingOff: agent.thinkingOff === true,
           system: buildSystemPrompt(agent, req.settings, teamNames),
           messages: buildMessages(
             runningHistory,
@@ -1051,6 +1063,10 @@ export async function runConversation(req: RunRequest, sink: RunSink): Promise<v
         capped: cappedTo ? { to: cappedTo, from: req.settings.maxOutputTokens, by: target.label } : undefined,
         // A listed question with more items than were searched.
         coverage: searchCoverage,
+        // What Melon searched for, so a missed page can be traced to its query.
+        queries: searchQueries,
+        // Thinking-off was asked for and the provider would not take it.
+        thinkingSwitchRefused: result.thinkingSwitchRefused === true || undefined,
         // Pages the model consulted, when it searched. Without these the
         // search is invisible: the answer is better but unverifiable.
         citations,

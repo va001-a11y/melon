@@ -1,4 +1,5 @@
 import type { FinishReason, ProviderAdapter, ProviderChatArgs, ProviderResult } from "../types.js";
+import { NEMOTRON_THINKING_OFF, thinkingSwitch } from "../thinking.js";
 import { CitationCollector } from "./citations.js";
 import { describeNetworkError, fetchLocalAware, readStreamLines, throwHttpError } from "./sse.js";
 import { imageAttachments, inlineTextAttachments } from "./attachments.js";
@@ -13,7 +14,8 @@ export const openai: ProviderAdapter = {
   id: "openai",
   label: "OpenAI-compatible",
   async chat(args: ProviderChatArgs): Promise<ProviderResult> {
-    const { model, apiKey, baseUrl, providerLabel, providerId, system, messages, maxOutputTokens, signal, handlers, webSearch, detailedCoT } = args;
+    const { model, apiKey, baseUrl, providerLabel, providerId, messages, maxOutputTokens, signal, handlers, webSearch, detailedCoT } = args;
+    let system = args.system;
     const base = (baseUrl ?? "https://api.openai.com/v1").replace(/\/+$/, "");
     const requestUrl = `${base}/chat/completions`;
     let url = requestUrl;
@@ -78,6 +80,24 @@ export const openai: ProviderAdapter = {
       body.reasoning = { enabled: false };
     }
 
+    // The agent's own "Think before answering" switch, spelled the way this
+    // provider spells it. Fields set here are dropped again if refused.
+    const thinkingFields: string[] = [];
+    const switchOff = args.thinkingOff ? thinkingSwitch(providerId ?? "", model) : null;
+    if (switchOff?.kind === "openrouter") {
+      body.reasoning = { enabled: false };
+      thinkingFields.push("reasoning");
+    } else if (switchOff?.kind === "groq-effort") {
+      body.reasoning_effort = "none";
+      thinkingFields.push("reasoning_effort");
+    } else if (switchOff?.kind === "nvidia-kwargs") {
+      body.chat_template_kwargs = { enable_thinking: false };
+      thinkingFields.push("chat_template_kwargs");
+    } else if (switchOff?.kind === "nvidia-prompt") {
+      system = `${NEMOTRON_THINKING_OFF}\n\n${system}`;
+      (body.messages as { role: string; content: unknown }[])[0].content = system;
+    }
+
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (apiKey) headers.authorization = `Bearer ${apiKey}`;
 
@@ -91,6 +111,28 @@ export const openai: ProviderAdapter = {
       url = attempt.url;
     } catch (err) {
       throw describeNetworkError(err, label, requestUrl);
+    }
+
+    /*
+     * A thinking switch the provider will not take. NVIDIA documents its
+     * switch for its own containers, not for its hosted API, so a refusal is
+     * asked again without it and the card says thinking stayed on — rather
+     * than the agent failing over an optional field.
+     */
+    let thinkingSwitchRefused = false;
+    if ((res.status === 400 || res.status === 422) && thinkingFields.length > 0) {
+      const retry = { ...body };
+      for (const field of thinkingFields) delete retry[field];
+      try {
+        const second = await fetch(url, { method: "POST", signal, headers, body: JSON.stringify(retry) });
+        if (second.ok) {
+          res = second;
+          thinkingSwitchRefused = true;
+          for (const field of thinkingFields) delete body[field];
+        }
+      } catch {
+        /* keep the original failure */
+      }
     }
 
     // Some providers reject stream_options, and newer OpenAI models want
@@ -310,6 +352,6 @@ export const openai: ProviderAdapter = {
     // section: close it so the drawer is readable rather than left open.
     await closeThinking();
 
-    return { text, usage: { inputTokens, outputTokens }, finishReason, citations: sources.list() };
+    return { text, usage: { inputTokens, outputTokens }, finishReason, citations: sources.list(), thinkingSwitchRefused };
   },
 };

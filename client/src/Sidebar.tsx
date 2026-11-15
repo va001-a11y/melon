@@ -252,6 +252,7 @@ export function Sidebar(props: Props) {
       personality: draft.personality.trim(),
       webSearch: draft.webSearch === true,
       followLinks: draft.followLinks === true,
+      thinkingOff: draft.thinkingOff === true,
     };
     if (editingId) {
       setAgents((prev) => prev.map((a) => (a.id === editingId ? { ...a, ...fields } : a)));
