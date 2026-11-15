@@ -10,6 +10,52 @@ reason is the part that is hard to recover later.
 
 ---
 
+## v0.8.0 — 2026-11-15
+
+**Agents can follow links.** Search engines hand over a snippet of each
+page, never the page. With *Follow links in search results* on in an
+agent's properties, it is shown its results — each with a line from its
+own text about what was asked, since many pages are titled with nothing
+but a number — picks which to read, and can follow their links in turn,
+up to *Pages an agent may open* (3 by default). It picks by label from
+links that really appeared in its sources, never by typing an address, so
+a page cannot steer it elsewhere. The switch, the setting and the preflight
+estimate all state the cost: up to *limit + 1* times as much per answer.
+
+**Pages are read where they answer the question.** A page read in full —
+by following links or with *Read full pages* — used to be cut to its first
+3,000 characters, which on a wiki are its menus; the SCP wiki's articles
+start some 6,000 characters in. Pages are now excerpted around the names
+the question asks about, so an agent sees the article, and the footnote
+that defines the term, rather than the navigation.
+
+**A list in a question is searched item by item, automatically.** Every
+item, as many as the smallest model in the run has room for, up to 25; a
+fixed cap is still in *Settings → Web search*. Items past the limit are
+named in the reply rather than silently dropped, and each reply's sources
+now end with what Melon actually searched for.
+
+**Think before answering, per agent.** For a model that reasons privately
+before it answers, its properties have a switch to make it answer straight
+away — faster, cheaper, and it can no longer spend its whole reply on
+thinking. Offered only where Melon knows a control that works: NVIDIA
+Nemotron, Groq's Qwen models, OpenRouter, Ollama and Gemini 2.5 Flash.
+
+**Answers that admit what they do not know.** Agents are told that a
+search missing something means it was not found, never that it is false,
+and that a page which only uses a term does not define it. The sources
+list says which pages were read in full, and a reply with no answer no
+longer calls what it was given "sources".
+
+**Smaller things.** The sources list is collapsed under a button. A short
+rate-limit wait ("try again in 5.7s") is sat out instead of failing. A
+provider's lower reply limit, once learned, is used for the rest of the
+run.
+
+Fixed in this release, in [BUGS.md](BUGS.md): Follow links never reached
+the run, whatever the switch said; and Automatic briefly sent five-item
+questions the room for twenty-five.
+
 ## v0.7.3 — 2026-11-03
 
 **Lock your API keys with a passphrase.** Keys were stored in the browser as
